@@ -1,0 +1,17 @@
+[project]
+name = "opensensorpanel"
+version = "0.1.0"
+description = "Linux-native SensorPanel-style hardware dashboard for Bazzite and PC builders"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+opensensorpanel = "opensensorpanel.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

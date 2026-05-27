@@ -222,6 +222,30 @@ console.log(JSON.stringify([
     assert json.loads(output) == [True, True, True, True, True, True]
 
 
+def test_web_app_renders_widget_icon_from_declared_template_asset():
+    script = f"""
+{WEB_APP_JS}
+dashboardTemplate = {{
+  assets: [{{id: 'asset.cpu.icon', type: 'icon', path: 'assets/cpu.svg', license: 'CC0', source: 'user'}}]
+}};
+const widget = {{
+  id: 'widget.cpu.used', sensor_id: 'cpu.total.used_percent', label: 'Gaming CPU', icon_asset_id: 'asset.cpu.icon',
+  x: 10, y: 20, width: 180, height: 90, font_family: 'Orbitron', label_size: 14, value_size: 42, locked: false,
+}};
+const sensor = {{id: 'cpu.total.used_percent', value: 55, unit: '%'}};
+const html = layoutWidgetHtml(widget, sensor);
+console.log(JSON.stringify([
+  html.includes('<img'),
+  html.includes('src="assets/cpu.svg"'),
+  html.includes('alt="Gaming CPU icon"'),
+]));
+"""
+
+    output = subprocess.check_output(["node", "-e", script], text=True)
+
+    assert json.loads(output) == [True, True, True]
+
+
 def test_home_page_contains_layout_editor_controls():
     handler = make_handler(lambda: {"schema_version": 1, "updated_at": "now", "sensors": []})
     server, base_url = _serve_once(handler)

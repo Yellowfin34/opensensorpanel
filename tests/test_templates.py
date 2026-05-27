@@ -15,6 +15,13 @@ def test_default_template_declares_hero_and_group_layout():
         "gpu.nvidia.0.power_watts",
     ]
     assert template["groups"][0] == {"category": "cpu", "label": "CPU"}
+    assert template["assets"][0] == {
+        "id": "asset.logo.opensensorpanel",
+        "type": "logo",
+        "path": "assets/opensensorpanel-logo.svg",
+        "license": "project-created",
+        "source": "OpenSensorPanel project",
+    }
 
 
 def test_default_template_declares_borderless_panel_size_and_positioned_widgets():
@@ -47,6 +54,64 @@ def test_validate_template_rejects_group_without_category():
     bad_template = {"schema_version": 1, "title": "Bad", "hero_sensor_ids": [], "groups": [{"label": "CPU"}]}
 
     with pytest.raises(TemplateValidationError, match="category"):
+        validate_template(bad_template)
+
+
+def test_validate_template_rejects_asset_without_license():
+    bad_template = {
+        "schema_version": 1,
+        "title": "Bad",
+        "hero_sensor_ids": [],
+        "groups": [],
+        "assets": [{"id": "asset.logo", "type": "logo", "path": "assets/logo.png", "source": "unknown"}],
+    }
+
+    with pytest.raises(TemplateValidationError, match="license"):
+        validate_template(bad_template)
+
+
+def test_validate_template_rejects_asset_path_outside_template_assets():
+    bad_template = {
+        "schema_version": 1,
+        "title": "Bad",
+        "hero_sensor_ids": [],
+        "groups": [],
+        "assets": [
+            {"id": "asset.logo", "type": "logo", "path": "../copied-aida64/logo.png", "license": "user-owned", "source": "user import"}
+        ],
+    }
+
+    with pytest.raises(TemplateValidationError, match="asset path"):
+        validate_template(bad_template)
+
+
+def test_validate_template_rejects_widget_icon_that_does_not_reference_asset():
+    bad_template = {
+        "schema_version": 1,
+        "title": "Bad",
+        "hero_sensor_ids": [],
+        "groups": [],
+        "assets": [],
+        "panel": {"width": 1024, "height": 600, "borderless": True, "background": "#080b12"},
+        "widgets": [
+            {
+                "id": "widget.cpu.used",
+                "sensor_id": "cpu.total.used_percent",
+                "label": "CPU",
+                "x": 0,
+                "y": 0,
+                "width": 200,
+                "height": 120,
+                "font_family": "Inter",
+                "label_size": 16,
+                "value_size": 42,
+                "locked": False,
+                "icon_asset_id": "asset.missing",
+            }
+        ],
+    }
+
+    with pytest.raises(TemplateValidationError, match="icon_asset_id"):
         validate_template(bad_template)
 
 

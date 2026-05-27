@@ -53,6 +53,9 @@ const DEFAULT_DASHBOARD_TEMPLATE = {
     {category: 'frequency', label: 'Frequency'},
     {category: 'pwm', label: 'PWM'},
   ],
+  assets: [
+    {id: 'asset.logo.opensensorpanel', type: 'logo', path: 'assets/opensensorpanel-logo.svg', license: 'project-created', source: 'OpenSensorPanel project'},
+  ],
   widgets: [
     {id: 'widget.cpu.used', sensor_id: 'cpu.total.used_percent', label: 'CPU', x: 32, y: 32, width: 220, height: 130, font_family: 'Inter, system-ui, sans-serif', label_size: 18, value_size: 48, locked: false},
     {id: 'widget.ram.used', sensor_id: 'memory.ram.used_percent', label: 'RAM', x: 284, y: 32, width: 220, height: 130, font_family: 'Inter, system-ui, sans-serif', label_size: 18, value_size: 48, locked: false},
@@ -153,12 +156,25 @@ function panelStyle(template = dashboardTemplate) {
 
 function layoutWidgetHtml(widget, sensor) {
   const valueHtml = sensor ? formatSensorValue(sensor) : '—';
+  const iconHtml = widgetIconHtml(widget);
   return `
     <article class="layout-widget ${widget.locked ? 'locked' : ''}" data-widget-id="${widget.id}" data-locked="${widget.locked}" style="left:${widget.x}px;top:${widget.y}px;width:${widget.width}px;height:${widget.height}px;font-family:${widget.font_family};">
+      ${iconHtml}
       <div class="layout-widget-label" style="font-size:${widget.label_size}px">${widget.label}</div>
       <div class="layout-widget-value" style="font-size:${widget.value_size}px">${valueHtml}</div>
     </article>
   `;
+}
+
+function widgetIconHtml(widget) {
+  if (!widget.icon_asset_id) {
+    return '';
+  }
+  const asset = (dashboardTemplate.assets || []).find(candidate => candidate.id === widget.icon_asset_id);
+  if (!asset) {
+    return '';
+  }
+  return `<img class="layout-widget-icon" src="${asset.path}" alt="${widget.label} icon">`;
 }
 
 function renderLayoutCanvas(sensors) {
@@ -337,6 +353,7 @@ INDEX_HTML = """<!doctype html>
     .layout-widget { position: absolute; box-sizing: border-box; padding: .8rem; border: 1px dashed #60a5fa; border-radius: 14px; background: #0f172acc; cursor: move; }
     .layout-widget.locked { border-style: solid; border-color: #22c55e; cursor: not-allowed; }
     .layout-widget-label { color: #93c5fd; font-weight: 700; }
+    .layout-widget-icon { max-width: 32px; max-height: 32px; object-fit: contain; margin-bottom: .35rem; }
     .layout-widget-value { color: #f8fafc; font-weight: 900; line-height: 1; }
     .editor-controls { background: #0f1724; border: 1px solid #263449; border-radius: 18px; padding: 1rem; }
     .editor-controls label { display: grid; gap: .25rem; margin: .6rem 0; color: #bfdbfe; font-size: .9rem; }

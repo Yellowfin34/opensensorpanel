@@ -37,6 +37,15 @@ DEFAULT_TEMPLATE: dict[str, Any] = {
         {"category": "frequency", "label": "Frequency"},
         {"category": "pwm", "label": "PWM"},
     ],
+    "assets": [
+        {
+            "id": "asset.logo.opensensorpanel",
+            "type": "logo",
+            "path": "assets/opensensorpanel-logo.svg",
+            "license": "project-created",
+            "source": "OpenSensorPanel project",
+        }
+    ],
     "widgets": [
         {
             "id": "widget.cpu.used",
@@ -105,6 +114,23 @@ def _require_number(mapping: dict[str, Any], key: str, context: str) -> None:
         raise TemplateValidationError(f"template {context} {key} must be a number")
 
 
+def _validate_assets(assets: Any) -> set[str]:
+    if not isinstance(assets, list):
+        raise TemplateValidationError("template assets must be a list")
+    asset_ids: set[str] = set()
+    for asset in assets:
+        if not isinstance(asset, dict):
+            raise TemplateValidationError("template asset must be an object")
+        for key in ["id", "type", "path", "license", "source"]:
+            _require_string(asset, key, "asset")
+        if asset["type"] not in {"icon", "logo", "background"}:
+            raise TemplateValidationError("template asset type must be icon, logo, or background")
+        if not asset["path"].startswith("assets/") or ".." in asset["path"].split("/"):
+            raise TemplateValidationError("template asset path must stay under assets/")
+        asset_ids.add(asset["id"])
+    return asset_ids
+
+
 def validate_template(template: dict[str, Any]) -> dict[str, Any]:
     if template.get("schema_version") != 1:
         raise TemplateValidationError("template schema_version must be 1")
@@ -136,6 +162,8 @@ def validate_template(template: dict[str, Any]) -> dict[str, Any]:
         _require_string(group, "category", "group")
         _require_string(group, "label", "group")
 
+    asset_ids = _validate_assets(template.get("assets", []))
+
     widgets = template.get("widgets", [])
     if not isinstance(widgets, list):
         raise TemplateValidationError("template widgets must be a list")
@@ -150,5 +178,9 @@ def validate_template(template: dict[str, Any]) -> dict[str, Any]:
             raise TemplateValidationError("template widget width and height must be positive")
         if not isinstance(widget.get("locked"), bool):
             raise TemplateValidationError("template widget locked must be a boolean")
+        if "icon_asset_id" in widget:
+            _require_string(widget, "icon_asset_id", "widget")
+            if widget["icon_asset_id"] not in asset_ids:
+                raise TemplateValidationError("template widget icon_asset_id must reference a declared asset")
 
     return deepcopy(template)

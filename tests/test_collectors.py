@@ -44,6 +44,8 @@ def test_collect_hwmon_temperatures_reads_each_hwmon_device(tmp_path: Path):
     (hwmon0 / "name").write_text("k10temp\n")
     (hwmon0 / "temp1_label").write_text("CPU Package\n")
     (hwmon0 / "temp1_input").write_text("51000\n")
+    (hwmon0 / "temp2_label").write_text("CPU Core\n")
+    (hwmon0 / "temp2_input").write_text("47000\n")
 
     hwmon1 = tmp_path / "hwmon1"
     hwmon1.mkdir()
@@ -59,6 +61,14 @@ def test_collect_hwmon_temperatures_reads_each_hwmon_device(tmp_path: Path):
             "category": "temperature",
             "device": "k10temp",
             "value": 51.0,
+            "unit": "C",
+        },
+        {
+            "id": "hwmon.hwmon0.k10temp.temp2",
+            "label": "CPU Core",
+            "category": "temperature",
+            "device": "k10temp",
+            "value": 47.0,
             "unit": "C",
         },
         {

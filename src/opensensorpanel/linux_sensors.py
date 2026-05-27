@@ -40,16 +40,25 @@ def cpu_usage_percent(before: dict[str, int], after: dict[str, int]) -> float:
     return round(((total_delta - idle_delta) / total_delta) * 100, 1)
 
 
+def parse_hwmon_temperatures(device: str, files: dict[str, str]) -> list[dict[str, str | float]]:
+    sensors: list[dict[str, str | float]] = []
+    input_names = [name for name in sorted(files) if name.startswith("temp") and name.endswith("_input")]
+    for input_name in input_names:
+        index = input_name.removeprefix("temp").removesuffix("_input")
+        label = files.get(f"temp{index}_label", f"temp{index}").strip()
+        value_c = int(files[input_name].strip()) / 1000
+        sensors.append(
+            {
+                "id": f"hwmon.{device}.temp{index}",
+                "label": label,
+                "category": "temperature",
+                "device": device,
+                "value": value_c,
+                "unit": "C",
+            }
+        )
+    return sensors
+
+
 def parse_hwmon_temperature(device: str, files: dict[str, str]) -> dict[str, str | float]:
-    input_name = next(name for name in sorted(files) if name.startswith("temp") and name.endswith("_input"))
-    index = input_name.removeprefix("temp").removesuffix("_input")
-    label = files.get(f"temp{index}_label", f"temp{index}").strip()
-    value_c = int(files[input_name].strip()) / 1000
-    return {
-        "id": f"hwmon.{device}.temp{index}",
-        "label": label,
-        "category": "temperature",
-        "device": device,
-        "value": value_c,
-        "unit": "C",
-    }
+    return parse_hwmon_temperatures(device, files)[0]

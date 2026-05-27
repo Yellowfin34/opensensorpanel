@@ -9,6 +9,48 @@ from .snapshot import collect_snapshot
 
 SnapshotCollector = Callable[[], dict[str, Any]]
 
+WEB_APP_JS = """
+function formatNumber(value) {
+  if (Number.isInteger(value)) {
+    return String(value);
+  }
+  return String(Number(value.toFixed(2)));
+}
+
+function formatSensorValue(sensor) {
+  const value = Number(sensor.value);
+  if (sensor.unit === 'B') {
+    return `${formatNumber(value / 1_000_000_000)} GB`;
+  }
+  if (sensor.unit === 'C') {
+    return `${formatNumber(value)} °C`;
+  }
+  if (sensor.unit === '%') {
+    return `${formatNumber(value)}%`;
+  }
+  if (sensor.unit) {
+    return `${formatNumber(value)} ${sensor.unit}`;
+  }
+  return formatNumber(value);
+}
+
+async function refresh() {
+  const response = await fetch('/api/snapshot');
+  const snapshot = await response.json();
+  document.querySelector('#sensors').innerHTML = snapshot.sensors.map(sensor => `
+    <article class="card">
+      <div class="label">${sensor.label}</div>
+      <div class="value">${formatSensorValue(sensor)}</div>
+      <div class="device">${sensor.device}</div>
+    </article>
+  `).join('');
+}
+if (typeof window !== 'undefined') {
+  refresh();
+  setInterval(refresh, 2000);
+}
+""".strip()
+
 INDEX_HTML = """<!doctype html>
 <html lang="en">
 <head>
@@ -34,23 +76,11 @@ INDEX_HTML = """<!doctype html>
     <section id="sensors" class="grid"></section>
   </main>
   <script>
-    async function refresh() {
-      const response = await fetch('/api/snapshot');
-      const snapshot = await response.json();
-      document.querySelector('#sensors').innerHTML = snapshot.sensors.map(sensor => `
-        <article class="card">
-          <div class="label">${sensor.label}</div>
-          <div class="value">${sensor.value} ${sensor.unit}</div>
-          <div class="device">${sensor.device}</div>
-        </article>
-      `).join('');
-    }
-    refresh();
-    setInterval(refresh, 2000);
+{web_app_js}
   </script>
 </body>
 </html>
-"""
+""".replace("{web_app_js}", WEB_APP_JS)
 
 
 def make_handler(collector: SnapshotCollector = collect_snapshot) -> type[BaseHTTPRequestHandler]:

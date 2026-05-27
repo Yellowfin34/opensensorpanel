@@ -5,7 +5,7 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
-from .linux_sensors import cpu_usage_percent, parse_hwmon_temperature, parse_meminfo, parse_proc_stat_cpu
+from .linux_sensors import cpu_usage_percent, parse_hwmon_temperatures, parse_meminfo, parse_proc_stat_cpu
 
 Sensor = dict[str, str | float | int]
 
@@ -66,10 +66,10 @@ def collect_hwmon_temperatures(hwmon_root: Path = Path("/sys/class/hwmon")) -> l
         if not any(name.startswith("temp") and name.endswith("_input") for name in files):
             continue
         device_name = files.get("name", device_path.name).strip()
-        sensor = parse_hwmon_temperature(device_name, files)
-        sensor_id = str(sensor["id"])
-        sensor["id"] = sensor_id.replace("hwmon.", f"hwmon.{device_path.name}.", 1)
-        sensors.append(sensor)
+        for sensor in parse_hwmon_temperatures(device_name, files):
+            sensor_id = str(sensor["id"])
+            sensor["id"] = sensor_id.replace("hwmon.", f"hwmon.{device_path.name}.", 1)
+            sensors.append(sensor)
     return sensors
 
 

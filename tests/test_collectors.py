@@ -2,6 +2,7 @@ from pathlib import Path
 
 from opensensorpanel.collectors import (
     collect_cpu_usage,
+    collect_hwmon_sensors,
     collect_hwmon_temperatures,
     collect_memory_snapshot,
     collect_nvidia_gpu_snapshot,
@@ -94,6 +95,37 @@ def test_collect_hwmon_temperatures_keeps_duplicate_device_names_unique(tmp_path
     assert [sensor["id"] for sensor in sensors] == [
         "hwmon.hwmon0.nvme.temp1",
         "hwmon.hwmon1.nvme.temp1",
+    ]
+
+
+def test_collect_hwmon_sensors_reads_common_hwmon_sensor_types(tmp_path: Path):
+    hwmon = tmp_path / "hwmon0"
+    hwmon.mkdir()
+    (hwmon / "name").write_text("nct6799\n")
+    (hwmon / "temp1_input").write_text("51000\n")
+    (hwmon / "fan2_input").write_text("1420\n")
+    (hwmon / "in3_input").write_text("3300\n")
+    (hwmon / "power4_input").write_text("65400000\n")
+    (hwmon / "curr5_input").write_text("12500\n")
+    (hwmon / "pwm6").write_text("128\n")
+
+    sensors = collect_hwmon_sensors(tmp_path)
+
+    assert [sensor["id"] for sensor in sensors] == [
+        "hwmon.hwmon0.nct6799.temp1",
+        "hwmon.hwmon0.nct6799.fan2",
+        "hwmon.hwmon0.nct6799.in3",
+        "hwmon.hwmon0.nct6799.power4",
+        "hwmon.hwmon0.nct6799.curr5",
+        "hwmon.hwmon0.nct6799.pwm6",
+    ]
+    assert [sensor["category"] for sensor in sensors] == [
+        "temperature",
+        "fan",
+        "voltage",
+        "power",
+        "current",
+        "pwm",
     ]
 
 

@@ -18,7 +18,7 @@ This repo currently contains the first tested backend prototype. It can collect:
 
 - RAM usage from `/proc/meminfo`
 - CPU usage from two `/proc/stat` samples
-- Temperatures exposed through Linux `hwmon` at `/sys/class/hwmon`, including multiple temperature inputs per device
+- Temperatures, fans/RPM, voltage, power, current, energy, humidity, frequency, and PWM values exposed through Linux `hwmon` at `/sys/class/hwmon`, including multiple inputs per device
 - NVIDIA GPU usage, memory, temperature, and power through `nvidia-smi` when available
 
 The code is intentionally small and test-driven. It now also includes a tiny local web UI prototype with friendlier value formatting.

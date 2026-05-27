@@ -5,7 +5,7 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
-from .linux_sensors import cpu_usage_percent, parse_hwmon_temperatures, parse_meminfo, parse_proc_stat_cpu
+from .linux_sensors import cpu_usage_percent, parse_hwmon_sensors, parse_meminfo, parse_proc_stat_cpu
 
 Sensor = dict[str, str | float | int]
 
@@ -56,32 +56,39 @@ def collect_cpu_usage(
     ]
 
 
-def collect_hwmon_temperatures(hwmon_root: Path = Path("/sys/class/hwmon")) -> list[Sensor]:
+def collect_hwmon_sensors(hwmon_root: Path = Path("/sys/class/hwmon")) -> list[Sensor]:
     sensors: list[Sensor] = []
     if not hwmon_root.exists():
         return sensors
 
     for device_path in sorted(path for path in hwmon_root.iterdir() if path.is_dir()):
         files = _read_hwmon_files(device_path)
-        if not any(name.startswith("temp") and name.endswith("_input") for name in files):
-            continue
         device_name = files.get("name", device_path.name).strip()
-        for sensor in parse_hwmon_temperatures(device_name, files):
+        for sensor in parse_hwmon_sensors(device_name, files):
             sensor_id = str(sensor["id"])
             sensor["id"] = sensor_id.replace("hwmon.", f"hwmon.{device_path.name}.", 1)
             sensors.append(sensor)
     return sensors
 
 
+def collect_hwmon_temperatures(hwmon_root: Path = Path("/sys/class/hwmon")) -> list[Sensor]:
+    return [sensor for sensor in collect_hwmon_sensors(hwmon_root) if sensor["category"] == "temperature"]
+
+
 def _read_hwmon_files(device_path: Path) -> dict[str, str]:
     files: dict[str, str] = {}
     for child in sorted(device_path.iterdir()):
-        if child.is_file() and (child.name == "name" or child.name.startswith("temp")):
+        if child.is_file() and (child.name == "name" or _is_hwmon_sensor_file(child.name)):
             try:
                 files[child.name] = child.read_text()
             except OSError:
                 continue
     return files
+
+
+def _is_hwmon_sensor_file(name: str) -> bool:
+    prefixes = ("temp", "fan", "in", "power", "curr", "energy", "humidity", "freq", "pwm")
+    return name.startswith(prefixes)
 
 
 def collect_nvidia_gpu_snapshot(

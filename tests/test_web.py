@@ -111,6 +111,64 @@ console.log(JSON.stringify(selectVisibleSensors(sensors, selected).map(sensor =>
     assert json.loads(output) == ['memory.ram.used_gb', 'gpu.nvidia.0.temperature']
 
 
+def test_web_app_groups_sensors_for_dashboard_sections():
+    script = f"""
+{WEB_APP_JS}
+const sensors = [
+  {{id: 'gpu.nvidia.0.temperature', category: 'temperature'}},
+  {{id: 'cpu.total.used_percent', category: 'cpu'}},
+  {{id: 'gpu.nvidia.0.power_watts', category: 'power'}},
+  {{id: 'memory.ram.used_percent', category: 'memory'}},
+];
+const groups = groupSensorsByCategory(sensors).map(group => [group.label, group.sensors.map(sensor => sensor.id)]);
+console.log(JSON.stringify(groups));
+"""
+
+    output = subprocess.check_output(["node", "-e", script], text=True)
+
+    assert json.loads(output) == [
+        ["CPU", ["cpu.total.used_percent"]],
+        ["Memory", ["memory.ram.used_percent"]],
+        ["Temperatures", ["gpu.nvidia.0.temperature"]],
+        ["Power", ["gpu.nvidia.0.power_watts"]],
+    ]
+
+
+def test_web_app_picks_hero_stats_for_top_bar():
+    script = f"""
+{WEB_APP_JS}
+const sensors = [
+  {{id: 'memory.ram.used_percent', label: 'RAM Used'}},
+  {{id: 'gpu.nvidia.0.temperature', label: 'GPU Temperature'}},
+  {{id: 'gpu.nvidia.0.power_watts', label: 'GPU Power'}},
+  {{id: 'cpu.total.used_percent', label: 'CPU Used'}},
+];
+console.log(JSON.stringify(pickHeroSensors(sensors).map(sensor => sensor.id)));
+"""
+
+    output = subprocess.check_output(["node", "-e", script], text=True)
+
+    assert json.loads(output) == [
+        'cpu.total.used_percent',
+        'memory.ram.used_percent',
+        'gpu.nvidia.0.temperature',
+        'gpu.nvidia.0.power_watts',
+    ]
+
+
+def test_home_page_contains_polished_dashboard_shell():
+    handler = make_handler(lambda: {"schema_version": 1, "updated_at": "now", "sensors": []})
+    server, base_url = _serve_once(handler)
+    try:
+        with urllib.request.urlopen(base_url) as response:
+            html = response.read().decode()
+        assert "hero-stats" in html
+        assert "sensor-groups" in html
+        assert "fullscreen" in html.lower()
+    finally:
+        server.shutdown()
+
+
 def test_home_page_contains_sensor_picker_shell():
     handler = make_handler(lambda: {"schema_version": 1, "updated_at": "now", "sensors": []})
     server, base_url = _serve_once(handler)

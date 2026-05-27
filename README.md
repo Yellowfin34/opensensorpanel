@@ -17,9 +17,11 @@ Build the Linux equivalent of the AIDA64 SensorPanel experience:
 This repo currently contains the first tested backend prototype. It can collect:
 
 - RAM usage from `/proc/meminfo`
+- CPU usage from two `/proc/stat` samples
 - Temperatures exposed through Linux `hwmon` at `/sys/class/hwmon`
+- NVIDIA GPU usage, memory, temperature, and power through `nvidia-smi` when available
 
-The code is intentionally small and test-driven. The next step is CPU usage sampling, then NVIDIA GPU support.
+The code is intentionally small and test-driven. It now also includes a tiny local web UI prototype.
 
 ## Run the prototype
 
@@ -35,6 +37,24 @@ For local development without installing:
 PYTHONPATH=src python3 -m opensensorpanel.cli
 ```
 
+## Run the local web panel
+
+```bash
+PYTHONPATH=src python3 -m opensensorpanel.cli serve --host 127.0.0.1 --port 8766
+```
+
+Then open:
+
+```text
+http://127.0.0.1:8766
+```
+
+The live JSON endpoint is:
+
+```text
+http://127.0.0.1:8766/api/snapshot
+```
+
 ## Run tests
 
 ```bash
@@ -47,7 +67,7 @@ Near-term:
 
 - Python backend prototype for fast hardware discovery
 - JSON sensor schema
-- CLI snapshot command
+- CLI snapshot command and local web panel
 
 Long-term:
 

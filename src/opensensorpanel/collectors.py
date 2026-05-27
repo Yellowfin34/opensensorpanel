@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import subprocess
+import time
+from collections.abc import Callable
 from pathlib import Path
 
-from .linux_sensors import parse_hwmon_temperature, parse_meminfo
+from .linux_sensors import cpu_usage_percent, parse_hwmon_temperature, parse_meminfo, parse_proc_stat_cpu
 
 Sensor = dict[str, str | float | int]
 
@@ -26,6 +29,30 @@ def collect_memory_snapshot(meminfo_path: Path = Path("/proc/meminfo")) -> list[
             "value": memory["used_bytes"],
             "unit": "B",
         },
+    ]
+
+
+def collect_cpu_usage(
+    stat_path: Path = Path("/proc/stat"),
+    *,
+    sample_interval_seconds: float = 0.1,
+    after_first_read: Callable[[], None] | None = None,
+) -> list[Sensor]:
+    before = parse_proc_stat_cpu(stat_path.read_text())
+    if after_first_read is not None:
+        after_first_read()
+    elif sample_interval_seconds > 0:
+        time.sleep(sample_interval_seconds)
+    after = parse_proc_stat_cpu(stat_path.read_text())
+    return [
+        {
+            "id": "cpu.total.used_percent",
+            "label": "CPU Used",
+            "category": "cpu",
+            "device": "CPU",
+            "value": cpu_usage_percent(before, after),
+            "unit": "%",
+        }
     ]
 
 
@@ -55,3 +82,80 @@ def _read_hwmon_files(device_path: Path) -> dict[str, str]:
             except OSError:
                 continue
     return files
+
+
+def collect_nvidia_gpu_snapshot(
+    *,
+    run_command: Callable[[list[str]], str] | None = None,
+) -> list[Sensor]:
+    runner = run_command or _run_command
+    command = [
+        "nvidia-smi",
+        "--query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu,power.draw",
+        "--format=csv,noheader,nounits",
+    ]
+    try:
+        output = runner(command)
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return []
+
+    sensors: list[Sensor] = []
+    for index, line in enumerate(output.splitlines()):
+        if not line.strip():
+            continue
+        parts = [part.strip() for part in line.split(",")]
+        if len(parts) != 6:
+            continue
+        name, gpu_util, memory_used_mib, memory_total_mib, temperature_c, power_watts = parts
+        used_mib = float(memory_used_mib)
+        total_mib = float(memory_total_mib)
+        device = name
+        sensors.extend(
+            [
+                {
+                    "id": f"gpu.nvidia.{index}.utilization_percent",
+                    "label": "GPU Used",
+                    "category": "gpu",
+                    "device": device,
+                    "value": float(gpu_util),
+                    "unit": "%",
+                },
+                {
+                    "id": f"gpu.nvidia.{index}.memory_used_bytes",
+                    "label": "GPU Memory Used",
+                    "category": "gpu",
+                    "device": device,
+                    "value": int(used_mib * 1024 * 1024),
+                    "unit": "B",
+                },
+                {
+                    "id": f"gpu.nvidia.{index}.memory_used_percent",
+                    "label": "GPU Memory Used",
+                    "category": "gpu",
+                    "device": device,
+                    "value": round((used_mib / total_mib) * 100, 1) if total_mib else 0.0,
+                    "unit": "%",
+                },
+                {
+                    "id": f"gpu.nvidia.{index}.temperature",
+                    "label": "GPU Temperature",
+                    "category": "temperature",
+                    "device": device,
+                    "value": float(temperature_c),
+                    "unit": "C",
+                },
+                {
+                    "id": f"gpu.nvidia.{index}.power_watts",
+                    "label": "GPU Power",
+                    "category": "power",
+                    "device": device,
+                    "value": float(power_watts),
+                    "unit": "W",
+                },
+            ]
+        )
+    return sensors
+
+
+def _run_command(command: list[str]) -> str:
+    return subprocess.check_output(command, text=True, stderr=subprocess.DEVNULL)

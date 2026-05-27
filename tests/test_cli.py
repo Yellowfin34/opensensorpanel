@@ -35,3 +35,16 @@ def test_cli_module_execution_prints_json():
     )
 
     assert json.loads(result.stdout)["schema_version"] == 1
+
+
+def test_cli_serve_starts_web_server(monkeypatch):
+    called = {}
+
+    def fake_serve(host: str, port: int) -> None:
+        called["host"] = host
+        called["port"] = port
+
+    monkeypatch.setattr(cli, "serve", fake_serve)
+
+    assert cli.main(["serve", "--host", "0.0.0.0", "--port", "9999"]) == 0
+    assert called == {"host": "0.0.0.0", "port": 9999}

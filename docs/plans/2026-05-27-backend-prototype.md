@@ -110,8 +110,16 @@ Expected: tests pass and CLI prints JSON.
 
 ## Next plan after this prototype
 
-1. Add real CPU usage sampling with two `/proc/stat` reads.
-2. Add NVIDIA GPU collector using `nvidia-smi --query-gpu=... --format=csv,noheader,nounits` first, then NVML later.
-3. Add FastAPI or bare WebSocket live feed.
-4. Build a fixed HTML/Tauri panel layout.
-5. Add template JSON format and renderer.
+Completed in follow-up:
+
+1. Added real CPU usage sampling with two `/proc/stat` reads.
+2. Added NVIDIA GPU collector using `nvidia-smi --query-gpu=... --format=csv,noheader,nounits`.
+3. Added a stdlib HTTP server with `/api/snapshot` and a simple live HTML panel.
+
+Next plan after this prototype:
+
+1. Improve `hwmon` support so one device can expose multiple temperature inputs.
+2. Add optional fan/RPM, voltage, and power sensors from `hwmon`.
+3. Add a template JSON format and renderer.
+4. Build a fixed Tauri/Svelte or Tauri/React panel layout.
+5. Replace the dev HTTP loop with a production-ready Rust or Python daemon when the schema stabilizes.

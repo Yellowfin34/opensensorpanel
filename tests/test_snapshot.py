@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+from opensensorpanel import snapshot as snapshot_module
 from opensensorpanel.snapshot import collect_snapshot
 
 
@@ -33,3 +34,27 @@ def test_snapshot_is_json_serializable(tmp_path: Path):
     snapshot = collect_snapshot(meminfo_path=meminfo, hwmon_root=hwmon_root)
 
     assert json.loads(json.dumps(snapshot))["schema_version"] == 1
+
+
+def test_collect_snapshot_includes_cpu_and_nvidia_gpu(monkeypatch, tmp_path: Path):
+    meminfo = tmp_path / "meminfo"
+    meminfo.write_text("MemTotal: 1000 kB\nMemAvailable: 250 kB\n")
+    hwmon_root = tmp_path / "hwmon"
+    hwmon_root.mkdir()
+
+    monkeypatch.setattr(
+        snapshot_module,
+        "collect_cpu_usage",
+        lambda: [{"id": "cpu.total.used_percent", "label": "CPU Used", "category": "cpu", "device": "CPU", "value": 12.3, "unit": "%"}],
+    )
+    monkeypatch.setattr(
+        snapshot_module,
+        "collect_nvidia_gpu_snapshot",
+        lambda: [{"id": "gpu.nvidia.0.utilization_percent", "label": "GPU Used", "category": "gpu", "device": "GPU", "value": 45.6, "unit": "%"}],
+    )
+
+    result = collect_snapshot(meminfo_path=meminfo, hwmon_root=hwmon_root)
+
+    sensor_ids = [sensor["id"] for sensor in result["sensors"]]
+    assert "cpu.total.used_percent" in sensor_ids
+    assert "gpu.nvidia.0.utilization_percent" in sensor_ids

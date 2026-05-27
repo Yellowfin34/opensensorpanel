@@ -32,6 +32,7 @@ const SELECTED_SENSOR_IDS_KEY = 'opensensorpanel.selectedSensorIds';
 const DEFAULT_DASHBOARD_TEMPLATE = {
   schema_version: 1,
   title: 'OpenSensorPanel',
+  panel: {width: 1024, height: 600, borderless: true, background: '#080b12'},
   hero_sensor_ids: [
     'cpu.total.used_percent',
     'memory.ram.used_percent',
@@ -51,6 +52,12 @@ const DEFAULT_DASHBOARD_TEMPLATE = {
     {category: 'humidity', label: 'Humidity'},
     {category: 'frequency', label: 'Frequency'},
     {category: 'pwm', label: 'PWM'},
+  ],
+  widgets: [
+    {id: 'widget.cpu.used', sensor_id: 'cpu.total.used_percent', label: 'CPU', x: 32, y: 32, width: 220, height: 130, font_family: 'Inter, system-ui, sans-serif', label_size: 18, value_size: 48, locked: false},
+    {id: 'widget.ram.used', sensor_id: 'memory.ram.used_percent', label: 'RAM', x: 284, y: 32, width: 220, height: 130, font_family: 'Inter, system-ui, sans-serif', label_size: 18, value_size: 48, locked: false},
+    {id: 'widget.gpu.temperature', sensor_id: 'gpu.nvidia.0.temperature', label: 'GPU Temp', x: 536, y: 32, width: 220, height: 130, font_family: 'Inter, system-ui, sans-serif', label_size: 18, value_size: 48, locked: false},
+    {id: 'widget.gpu.power', sensor_id: 'gpu.nvidia.0.power_watts', label: 'GPU Watts', x: 788, y: 32, width: 204, height: 130, font_family: 'Inter, system-ui, sans-serif', label_size: 18, value_size: 48, locked: false},
   ],
 };
 let dashboardTemplate = DEFAULT_DASHBOARD_TEMPLATE;
@@ -139,6 +146,80 @@ function sensorCardHtml(sensor, extraClass = '') {
   `;
 }
 
+function panelStyle(template = dashboardTemplate) {
+  const panel = template.panel || DEFAULT_DASHBOARD_TEMPLATE.panel;
+  return `width:${panel.width}px;height:${panel.height}px;background:${panel.background};`;
+}
+
+function layoutWidgetHtml(widget, sensor) {
+  const valueHtml = sensor ? formatSensorValue(sensor) : '—';
+  return `
+    <article class="layout-widget ${widget.locked ? 'locked' : ''}" data-widget-id="${widget.id}" data-locked="${widget.locked}" style="left:${widget.x}px;top:${widget.y}px;width:${widget.width}px;height:${widget.height}px;font-family:${widget.font_family};">
+      <div class="layout-widget-label" style="font-size:${widget.label_size}px">${widget.label}</div>
+      <div class="layout-widget-value" style="font-size:${widget.value_size}px">${valueHtml}</div>
+    </article>
+  `;
+}
+
+function renderLayoutCanvas(sensors) {
+  const byId = new Map(sensors.map(sensor => [sensor.id, sensor]));
+  const canvas = document.querySelector('#layout-canvas');
+  canvas.setAttribute('style', panelStyle(dashboardTemplate));
+  canvas.innerHTML = (dashboardTemplate.widgets || [])
+    .map(widget => layoutWidgetHtml(widget, byId.get(widget.sensor_id)))
+    .join('');
+}
+
+function updatePanelSize(template, width, height) {
+  template.panel = template.panel || {};
+  template.panel.width = Number(width);
+  template.panel.height = Number(height);
+}
+
+function updateWidgetDesign(template, widgetId, changes) {
+  const widget = (template.widgets || []).find(candidate => candidate.id === widgetId);
+  if (!widget) {
+    return;
+  }
+  for (const key of ['label', 'font_family', 'label_size', 'value_size', 'locked']) {
+    if (Object.prototype.hasOwnProperty.call(changes, key)) {
+      widget[key] = ['label_size', 'value_size'].includes(key) ? Number(changes[key]) : changes[key];
+    }
+  }
+}
+
+function populateLayoutEditorControls() {
+  const firstWidget = (dashboardTemplate.widgets || [])[0];
+  document.querySelector('#panel-width').value = dashboardTemplate.panel?.width || '';
+  document.querySelector('#panel-height').value = dashboardTemplate.panel?.height || '';
+  if (firstWidget) {
+    document.querySelector('#widget-label').value = firstWidget.label;
+    document.querySelector('#widget-font-family').value = firstWidget.font_family;
+    document.querySelector('#widget-label-size').value = firstWidget.label_size;
+    document.querySelector('#widget-value-size').value = firstWidget.value_size;
+    document.querySelector('#widget-locked').checked = firstWidget.locked;
+  }
+}
+
+function setupLayoutEditorControls() {
+  const apply = () => {
+    const firstWidget = (dashboardTemplate.widgets || [])[0];
+    updatePanelSize(dashboardTemplate, document.querySelector('#panel-width').value, document.querySelector('#panel-height').value);
+    if (firstWidget) {
+      updateWidgetDesign(dashboardTemplate, firstWidget.id, {
+        label: document.querySelector('#widget-label').value,
+        font_family: document.querySelector('#widget-font-family').value,
+        label_size: document.querySelector('#widget-label-size').value,
+        value_size: document.querySelector('#widget-value-size').value,
+        locked: document.querySelector('#widget-locked').checked,
+      });
+    }
+    refresh();
+  };
+  ['#panel-width', '#panel-height', '#widget-label', '#widget-font-family', '#widget-label-size', '#widget-value-size', '#widget-locked']
+    .forEach(selector => document.querySelector(selector).addEventListener('input', apply));
+}
+
 function renderHeroStats(sensors) {
   const heroSensors = pickHeroSensors(sensors);
   document.querySelector('#hero-stats').innerHTML = heroSensors.map(sensor => sensorCardHtml(sensor, 'hero-card')).join('');
@@ -158,6 +239,7 @@ function renderGroupedCards(sensors) {
 
 function renderSensorCards(sensors) {
   const visibleSensors = selectVisibleSensors(sensors, loadSelectedSensorIds());
+  renderLayoutCanvas(visibleSensors);
   renderHeroStats(visibleSensors);
   renderGroupedCards(visibleSensors);
 }
@@ -212,7 +294,9 @@ async function loadTemplate() {
 
 async function startOpenSensorPanel() {
   setupFullscreenButton();
+  setupLayoutEditorControls();
   await loadTemplate();
+  populateLayoutEditorControls();
   await loadSensorPicker();
   await refresh();
   setInterval(refresh, 2000);
@@ -248,6 +332,15 @@ INDEX_HTML = """<!doctype html>
     .hero-card .value { font-size: clamp(2.3rem, 5vw, 4.2rem); }
     .device { color: #cbd5e1; font-size: .85rem; margin-top: .25rem; }
     .sensor-group { margin-top: 1rem; }
+    .layout-editor { margin-top: 2rem; display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 1rem; align-items: start; }
+    .layout-canvas { position: relative; overflow: hidden; border: 1px solid #38bdf8aa; border-radius: 0; box-shadow: 0 16px 40px #000a; }
+    .layout-widget { position: absolute; box-sizing: border-box; padding: .8rem; border: 1px dashed #60a5fa; border-radius: 14px; background: #0f172acc; cursor: move; }
+    .layout-widget.locked { border-style: solid; border-color: #22c55e; cursor: not-allowed; }
+    .layout-widget-label { color: #93c5fd; font-weight: 700; }
+    .layout-widget-value { color: #f8fafc; font-weight: 900; line-height: 1; }
+    .editor-controls { background: #0f1724; border: 1px solid #263449; border-radius: 18px; padding: 1rem; }
+    .editor-controls label { display: grid; gap: .25rem; margin: .6rem 0; color: #bfdbfe; font-size: .9rem; }
+    .editor-controls input { background: #020617; color: #f8fafc; border: 1px solid #334155; border-radius: 8px; padding: .45rem; }
     .picker { margin-top: 2rem; background: #0f1724; border: 1px solid #263449; border-radius: 18px; padding: 1rem; }
     .sensor-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: .5rem; }
     .sensor-option { display: flex; gap: .5rem; align-items: center; color: #dbeafe; font-size: .9rem; }
@@ -269,6 +362,23 @@ INDEX_HTML = """<!doctype html>
       <button id="fullscreen-button" class="button" type="button">Fullscreen</button>
     </header>
     <section id="hero-stats" class="hero-grid" aria-label="Hero stats"></section>
+    <section class="layout-editor" aria-labelledby="layout-editor-heading">
+      <div>
+        <h2 id="layout-editor-heading">Custom Layout Canvas</h2>
+        <div id="layout-canvas" class="layout-canvas" aria-label="Borderless panel layout canvas"></div>
+      </div>
+      <aside class="editor-controls" aria-label="Layout editor controls">
+        <h2>Layout Settings</h2>
+        <label>Panel width <input id="panel-width" type="number" min="100" step="1"></label>
+        <label>Panel height <input id="panel-height" type="number" min="100" step="1"></label>
+        <label>Custom label <input id="widget-label" type="text" placeholder="CPU, GPU Temp, etc."></label>
+        <label>Font family <input id="widget-font-family" type="text" placeholder="Inter, Orbitron, monospace"></label>
+        <label>Label size <input id="widget-label-size" type="number" min="8" step="1"></label>
+        <label>Value size <input id="widget-value-size" type="number" min="12" step="1"></label>
+        <label><input id="widget-locked" type="checkbox"> Lock selected item position</label>
+        <p class="hint">MVP editor schema supports borderless panel size, fixed widget positions, custom labels, font choices, sizes, and locked items.</p>
+      </aside>
+    </section>
     <section id="sensor-groups" aria-label="Grouped sensors"></section>
     <section class="picker" aria-labelledby="available-sensors-heading">
       <h2 id="available-sensors-heading">Available Sensors</h2>

@@ -186,6 +186,82 @@ def test_home_page_contains_polished_dashboard_shell():
         server.shutdown()
 
 
+def test_web_app_builds_borderless_panel_style_from_template_size():
+    script = f"""
+{WEB_APP_JS}
+const template = {{panel: {{width: 800, height: 480, borderless: true, background: '#111827'}}}};
+console.log(panelStyle(template));
+"""
+
+    output = subprocess.check_output(["node", "-e", script], text=True)
+
+    assert output.strip() == "width:800px;height:480px;background:#111827;"
+
+
+def test_web_app_renders_positioned_widget_with_custom_label_font_and_lock_state():
+    script = f"""
+{WEB_APP_JS}
+const widget = {{
+  id: 'widget.cpu.used', sensor_id: 'cpu.total.used_percent', label: 'Gaming CPU',
+  x: 10, y: 20, width: 180, height: 90, font_family: 'Orbitron', label_size: 14, value_size: 42, locked: true,
+}};
+const sensor = {{id: 'cpu.total.used_percent', value: 55, unit: '%'}};
+const html = layoutWidgetHtml(widget, sensor);
+console.log(JSON.stringify([
+  html.includes('data-widget-id="widget.cpu.used"'),
+  html.includes('data-locked="true"'),
+  html.includes('left:10px;top:20px;width:180px;height:90px;font-family:Orbitron;'),
+  html.includes('font-size:14px'),
+  html.includes('font-size:42px'),
+  html.includes('Gaming CPU'),
+]));
+"""
+
+    output = subprocess.check_output(["node", "-e", script], text=True)
+
+    assert json.loads(output) == [True, True, True, True, True, True]
+
+
+def test_home_page_contains_layout_editor_controls():
+    handler = make_handler(lambda: {"schema_version": 1, "updated_at": "now", "sensors": []})
+    server, base_url = _serve_once(handler)
+    try:
+        with urllib.request.urlopen(base_url) as response:
+            html = response.read().decode()
+        assert "layout-canvas" in html
+        assert "panel-width" in html
+        assert "panel-height" in html
+        assert "widget-label" in html
+        assert "widget-font-family" in html
+        assert "widget-locked" in html
+    finally:
+        server.shutdown()
+
+
+def test_web_app_updates_panel_size_and_widget_design_in_template():
+    script = f"""
+{WEB_APP_JS}
+const template = {{
+  panel: {{width: 800, height: 480, borderless: true, background: '#111827'}},
+  widgets: [{{id: 'widget.cpu.used', label: 'CPU', font_family: 'Inter', label_size: 12, value_size: 36, locked: false}}]
+}};
+updatePanelSize(template, 1280, 400);
+updateWidgetDesign(template, 'widget.cpu.used', {{label: 'Gaming CPU', font_family: 'Orbitron', label_size: 16, value_size: 52, locked: true}});
+console.log(JSON.stringify(template));
+"""
+
+    output = subprocess.check_output(["node", "-e", script], text=True)
+    template = json.loads(output)
+
+    assert template["panel"]["width"] == 1280
+    assert template["panel"]["height"] == 400
+    assert template["widgets"][0]["label"] == "Gaming CPU"
+    assert template["widgets"][0]["font_family"] == "Orbitron"
+    assert template["widgets"][0]["label_size"] == 16
+    assert template["widgets"][0]["value_size"] == 52
+    assert template["widgets"][0]["locked"] is True
+
+
 def test_home_page_contains_sensor_picker_shell():
     handler = make_handler(lambda: {"schema_version": 1, "updated_at": "now", "sensors": []})
     server, base_url = _serve_once(handler)

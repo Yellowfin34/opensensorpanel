@@ -64,6 +64,19 @@ def test_api_sensors_returns_available_sensor_metadata_without_live_values():
         server.shutdown()
 
 
+def test_api_template_returns_default_layout_template():
+    handler = make_handler(lambda: {"schema_version": 1, "updated_at": "now", "sensors": []})
+    server, base_url = _serve_once(handler)
+    try:
+        with urllib.request.urlopen(f"{base_url}/api/template") as response:
+            payload = json.loads(response.read())
+        assert payload["schema_version"] == 1
+        assert payload["hero_sensor_ids"][0] == "cpu.total.used_percent"
+        assert {"category": "temperature", "label": "Temperatures"} in payload["groups"]
+    finally:
+        server.shutdown()
+
+
 def test_home_page_contains_panel_shell():
     handler = make_handler(lambda: {"schema_version": 1, "updated_at": "now", "sensors": []})
     server, base_url = _serve_once(handler)
@@ -120,17 +133,22 @@ const sensors = [
   {{id: 'gpu.nvidia.0.power_watts', category: 'power'}},
   {{id: 'memory.ram.used_percent', category: 'memory'}},
 ];
-const groups = groupSensorsByCategory(sensors).map(group => [group.label, group.sensors.map(sensor => sensor.id)]);
+const template = {{
+  groups: [
+    {{category: 'power', label: 'Watts'}},
+    {{category: 'cpu', label: 'Processor'}},
+  ]
+}};
+const groups = groupSensorsByCategory(sensors, template).map(group => [group.label, group.sensors.map(sensor => sensor.id)]);
 console.log(JSON.stringify(groups));
 """
 
     output = subprocess.check_output(["node", "-e", script], text=True)
 
     assert json.loads(output) == [
-        ["CPU", ["cpu.total.used_percent"]],
-        ["Memory", ["memory.ram.used_percent"]],
-        ["Temperatures", ["gpu.nvidia.0.temperature"]],
-        ["Power", ["gpu.nvidia.0.power_watts"]],
+        ["Watts", ["gpu.nvidia.0.power_watts"]],
+        ["Processor", ["cpu.total.used_percent"]],
+        ["Other", ["gpu.nvidia.0.temperature", "memory.ram.used_percent"]],
     ]
 
 
@@ -143,16 +161,15 @@ const sensors = [
   {{id: 'gpu.nvidia.0.power_watts', label: 'GPU Power'}},
   {{id: 'cpu.total.used_percent', label: 'CPU Used'}},
 ];
-console.log(JSON.stringify(pickHeroSensors(sensors).map(sensor => sensor.id)));
+const template = {{hero_sensor_ids: ['gpu.nvidia.0.power_watts', 'cpu.total.used_percent']}};
+console.log(JSON.stringify(pickHeroSensors(sensors, template).map(sensor => sensor.id)));
 """
 
     output = subprocess.check_output(["node", "-e", script], text=True)
 
     assert json.loads(output) == [
-        'cpu.total.used_percent',
-        'memory.ram.used_percent',
-        'gpu.nvidia.0.temperature',
         'gpu.nvidia.0.power_watts',
+        'cpu.total.used_percent',
     ]
 
 

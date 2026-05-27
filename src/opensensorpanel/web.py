@@ -6,6 +6,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
 from .snapshot import collect_snapshot
+from .templates import DEFAULT_TEMPLATE, validate_template
 
 SnapshotCollector = Callable[[], dict[str, Any]]
 
@@ -28,26 +29,31 @@ def available_sensors(snapshot: dict[str, Any]) -> dict[str, Any]:
 
 WEB_APP_JS = """
 const SELECTED_SENSOR_IDS_KEY = 'opensensorpanel.selectedSensorIds';
-const HERO_SENSOR_IDS = [
-  'cpu.total.used_percent',
-  'memory.ram.used_percent',
-  'gpu.nvidia.0.temperature',
-  'gpu.nvidia.0.power_watts',
-];
-const SENSOR_GROUPS = [
-  ['cpu', 'CPU'],
-  ['memory', 'Memory'],
-  ['gpu', 'GPU'],
-  ['temperature', 'Temperatures'],
-  ['fan', 'Fans'],
-  ['voltage', 'Voltages'],
-  ['power', 'Power'],
-  ['current', 'Current'],
-  ['energy', 'Energy'],
-  ['humidity', 'Humidity'],
-  ['frequency', 'Frequency'],
-  ['pwm', 'PWM'],
-];
+const DEFAULT_DASHBOARD_TEMPLATE = {
+  schema_version: 1,
+  title: 'OpenSensorPanel',
+  hero_sensor_ids: [
+    'cpu.total.used_percent',
+    'memory.ram.used_percent',
+    'gpu.nvidia.0.temperature',
+    'gpu.nvidia.0.power_watts',
+  ],
+  groups: [
+    {category: 'cpu', label: 'CPU'},
+    {category: 'memory', label: 'Memory'},
+    {category: 'gpu', label: 'GPU'},
+    {category: 'temperature', label: 'Temperatures'},
+    {category: 'fan', label: 'Fans'},
+    {category: 'voltage', label: 'Voltages'},
+    {category: 'power', label: 'Power'},
+    {category: 'current', label: 'Current'},
+    {category: 'energy', label: 'Energy'},
+    {category: 'humidity', label: 'Humidity'},
+    {category: 'frequency', label: 'Frequency'},
+    {category: 'pwm', label: 'PWM'},
+  ],
+};
+let dashboardTemplate = DEFAULT_DASHBOARD_TEMPLATE;
 
 function formatNumber(value) {
   if (Number.isInteger(value)) {
@@ -100,22 +106,23 @@ function selectVisibleSensors(sensors, selectedSensorIds) {
   return sensors.filter(sensor => selected.has(sensor.id));
 }
 
-function pickHeroSensors(sensors) {
+function pickHeroSensors(sensors, template = dashboardTemplate) {
+  const heroSensorIds = template.hero_sensor_ids || [];
   const byId = new Map(sensors.map(sensor => [sensor.id, sensor]));
-  return HERO_SENSOR_IDS.map(sensorId => byId.get(sensorId)).filter(Boolean);
+  return heroSensorIds.map(sensorId => byId.get(sensorId)).filter(Boolean);
 }
 
-function groupSensorsByCategory(sensors) {
-  const remaining = [...sensors];
+function groupSensorsByCategory(sensors, template = dashboardTemplate) {
+  const templateGroups = template.groups || [];
   const groups = [];
-  for (const [category, label] of SENSOR_GROUPS) {
-    const groupSensors = remaining.filter(sensor => sensor.category === category);
+  for (const group of templateGroups) {
+    const groupSensors = sensors.filter(sensor => sensor.category === group.category);
     if (groupSensors.length) {
-      groups.push({category, label, sensors: groupSensors});
+      groups.push({category: group.category, label: group.label, sensors: groupSensors});
     }
   }
-  const knownCategories = new Set(SENSOR_GROUPS.map(([category]) => category));
-  const otherSensors = remaining.filter(sensor => !knownCategories.has(sensor.category));
+  const knownCategories = new Set(templateGroups.map(group => group.category));
+  const otherSensors = sensors.filter(sensor => !knownCategories.has(sensor.category));
   if (otherSensors.length) {
     groups.push({category: 'other', label: 'Other', sensors: otherSensors});
   }
@@ -198,8 +205,14 @@ async function loadSensorPicker() {
   renderSensorPicker(data.sensors);
 }
 
+async function loadTemplate() {
+  const response = await fetch('/api/template');
+  dashboardTemplate = await response.json();
+}
+
 async function startOpenSensorPanel() {
   setupFullscreenButton();
+  await loadTemplate();
   await loadSensorPicker();
   await refresh();
   setInterval(refresh, 2000);
@@ -282,6 +295,9 @@ def make_handler(collector: SnapshotCollector = collect_snapshot) -> type[BaseHT
                 return
             if self.path == "/api/sensors":
                 self._send_json(available_sensors(collector()))
+                return
+            if self.path == "/api/template":
+                self._send_json(validate_template(DEFAULT_TEMPLATE))
                 return
             self.send_error(404)
 

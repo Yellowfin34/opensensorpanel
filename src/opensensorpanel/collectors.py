@@ -22,12 +22,12 @@ def collect_memory_snapshot(meminfo_path: Path = Path("/proc/meminfo")) -> list[
             "unit": "%",
         },
         {
-            "id": "memory.ram.used_bytes",
-            "label": "RAM Used Bytes",
+            "id": "memory.ram.used_gb",
+            "label": "RAM Used",
             "category": "memory",
             "device": "System Memory",
-            "value": memory["used_bytes"],
-            "unit": "B",
+            "value": round(float(memory["used_bytes"]) / 1_000_000_000, 2),
+            "unit": "GB",
         },
     ]
 

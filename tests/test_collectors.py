@@ -28,12 +28,12 @@ def test_collect_memory_snapshot_reads_proc_meminfo(tmp_path: Path):
             "unit": "%",
         },
         {
-            "id": "memory.ram.used_bytes",
-            "label": "RAM Used Bytes",
+            "id": "memory.ram.used_gb",
+            "label": "RAM Used",
             "category": "memory",
             "device": "System Memory",
-            "value": 5000000 * 1024,
-            "unit": "B",
+            "value": 5.12,
+            "unit": "GB",
         },
     ]
 

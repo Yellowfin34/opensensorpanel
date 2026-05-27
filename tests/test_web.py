@@ -26,6 +26,44 @@ def test_api_snapshot_returns_json():
         server.shutdown()
 
 
+def test_api_sensors_returns_available_sensor_metadata_without_live_values():
+    handler = make_handler(
+        lambda: {
+            "schema_version": 1,
+            "updated_at": "now",
+            "sensors": [
+                {
+                    "id": "cpu.total.used_percent",
+                    "label": "CPU Used",
+                    "category": "cpu",
+                    "device": "CPU",
+                    "value": 12.3,
+                    "unit": "%",
+                }
+            ],
+        }
+    )
+    server, base_url = _serve_once(handler)
+    try:
+        with urllib.request.urlopen(f"{base_url}/api/sensors") as response:
+            assert response.status == 200
+            assert response.headers["Content-Type"] == "application/json"
+            assert json.loads(response.read()) == {
+                "schema_version": 1,
+                "sensors": [
+                    {
+                        "id": "cpu.total.used_percent",
+                        "label": "CPU Used",
+                        "category": "cpu",
+                        "device": "CPU",
+                        "unit": "%",
+                    }
+                ],
+            }
+    finally:
+        server.shutdown()
+
+
 def test_home_page_contains_panel_shell():
     handler = make_handler(lambda: {"schema_version": 1, "updated_at": "now", "sensors": []})
     server, base_url = _serve_once(handler)
@@ -54,3 +92,32 @@ console.log(JSON.stringify(examples));
     output = subprocess.check_output(["node", "-e", script], text=True)
 
     assert json.loads(output) == ["5.37 GB", "43 °C", "16.3 W", "62.5%", "5.12 GB"]
+
+
+def test_web_app_filters_visible_sensors_from_saved_selection():
+    script = f"""
+{WEB_APP_JS}
+const sensors = [
+  {{id: 'cpu.total.used_percent'}},
+  {{id: 'memory.ram.used_gb'}},
+  {{id: 'gpu.nvidia.0.temperature'}},
+];
+const selected = ['memory.ram.used_gb', 'gpu.nvidia.0.temperature'];
+console.log(JSON.stringify(selectVisibleSensors(sensors, selected).map(sensor => sensor.id)));
+"""
+
+    output = subprocess.check_output(["node", "-e", script], text=True)
+
+    assert json.loads(output) == ['memory.ram.used_gb', 'gpu.nvidia.0.temperature']
+
+
+def test_home_page_contains_sensor_picker_shell():
+    handler = make_handler(lambda: {"schema_version": 1, "updated_at": "now", "sensors": []})
+    server, base_url = _serve_once(handler)
+    try:
+        with urllib.request.urlopen(base_url) as response:
+            html = response.read().decode()
+        assert "Available Sensors" in html
+        assert "selected-sensors" in html
+    finally:
+        server.shutdown()

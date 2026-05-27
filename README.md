@@ -21,7 +21,7 @@ This repo currently contains the first tested backend prototype. It can collect:
 - Temperatures, fans/RPM, voltage, power, current, energy, humidity, frequency, and PWM values exposed through Linux `hwmon` at `/sys/class/hwmon`, including multiple inputs per device
 - NVIDIA GPU usage, memory, temperature, and power through `nvidia-smi` when available
 
-The code is intentionally small and test-driven. It now also includes a tiny local web UI prototype with friendlier value formatting.
+The code is intentionally small and test-driven. It now also includes a tiny local web UI prototype with friendlier value formatting, a separate sensor-list API, and browser-saved sensor visibility choices.
 
 ## Run the prototype
 
@@ -49,11 +49,14 @@ Then open:
 http://127.0.0.1:8766
 ```
 
-The live JSON endpoint is:
+The live JSON endpoints are:
 
 ```text
 http://127.0.0.1:8766/api/snapshot
+http://127.0.0.1:8766/api/sensors
 ```
+
+`/api/snapshot` returns current values. `/api/sensors` returns metadata for the sensor picker.
 
 ## Run tests
 

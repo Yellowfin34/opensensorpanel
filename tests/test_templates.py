@@ -1,6 +1,6 @@
 import pytest
 
-from opensensorpanel.templates import DEFAULT_TEMPLATE, TemplateValidationError, validate_template
+from opensensorpanel.templates import DEFAULT_TEMPLATE, TemplateValidationError, map_template_sensors, validate_template
 
 
 def test_default_template_declares_hero_and_group_layout():
@@ -21,6 +21,7 @@ def test_default_template_declares_hero_and_group_layout():
         "path": "assets/opensensorpanel-logo.svg",
         "license": "project-created",
         "source": "OpenSensorPanel project",
+        "redistributable": True,
     }
 
 
@@ -140,3 +141,36 @@ def test_validate_template_rejects_widget_without_lock_state():
 
     with pytest.raises(TemplateValidationError, match="locked"):
         validate_template(bad_template)
+
+
+def test_validate_template_accepts_explicit_sensor_mappings_for_imported_templates():
+    template = {
+        **DEFAULT_TEMPLATE,
+        "sensor_mappings": {
+            "AIDA64/GPU Diode": "gpu.nvidia.0.temperature",
+            "AIDA64/CPU Utilization": "cpu.total.used_percent",
+        },
+    }
+
+    validated = validate_template(template)
+
+    assert validated["sensor_mappings"]["AIDA64/GPU Diode"] == "gpu.nvidia.0.temperature"
+
+
+def test_map_template_sensors_rewrites_imported_sensor_ids_on_widgets_and_heroes():
+    template = {
+        **DEFAULT_TEMPLATE,
+        "hero_sensor_ids": ["AIDA64/CPU Utilization"],
+        "sensor_mappings": {"AIDA64/CPU Utilization": "cpu.total.used_percent"},
+        "widgets": [
+            {
+                **DEFAULT_TEMPLATE["widgets"][0],
+                "sensor_id": "AIDA64/CPU Utilization",
+            }
+        ],
+    }
+
+    mapped = map_template_sensors(template)
+
+    assert mapped["hero_sensor_ids"] == ["cpu.total.used_percent"]
+    assert mapped["widgets"][0]["sensor_id"] == "cpu.total.used_percent"

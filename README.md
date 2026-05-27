@@ -21,7 +21,7 @@ This repo currently contains the first tested backend prototype. It can collect:
 - Temperatures, fans/RPM, voltage, power, current, energy, humidity, frequency, and PWM values exposed through Linux `hwmon` at `/sys/class/hwmon`, including multiple inputs per device
 - NVIDIA GPU usage, memory, temperature, and power through `nvidia-smi` when available
 
-The code is intentionally small and test-driven. It now also includes an installable desktop-style launcher for Bazzite/Linux, a polished local UI with hero stats, grouped sensor cards, friendlier value formatting, a fullscreen button for second-screen use, a separate sensor-list API, a template/layout API, configurable borderless panel dimensions, fixed-position widgets, custom labels/fonts/sizes, custom asset metadata for icons/logos/backgrounds, lock state for positioned items, and browser-saved sensor visibility choices.
+The code is intentionally small and test-driven. It now also includes an installable desktop-style launcher for Bazzite/Linux, a polished local UI with hero stats, grouped sensor cards, friendlier value formatting, a fullscreen button for second-screen use, a separate sensor-list API, a template/layout API, configurable borderless panel dimensions, fixed-position widgets, custom labels/fonts/sizes, custom asset metadata for icons/logos/backgrounds, lock state for positioned items, browser-saved sensor visibility choices, `.ospanel` package import/export foundations, local-only AIDA64 import inspection, sensor remapping support, and early drag/resize/select layout editor helpers.
 
 ## Run the prototype
 
@@ -95,9 +95,12 @@ Near-term:
 - JSON sensor schema
 - CLI snapshot command, local service, and desktop-style app launcher
 - Template schema for fixed-position panel layouts
-- Template asset metadata for custom icons, logos, and backgrounds with source/license tracking
-- Clean-room AIDA64 import strategy for user-owned local templates
-- Browser layout editor controls for panel size and widget label/font/lock settings
+- `.ospanel` ZIP packages containing `template.json` plus an `assets/` folder
+- Template asset metadata for custom icons, logos, and backgrounds with source/license/redistribution tracking
+- Public export blocking for non-redistributable imported assets
+- Clean-room AIDA64 import strategy plus local-only `.sensorpanel` inspector
+- Sensor remapping support for imported templates whose sensor names do not match Linux IDs
+- Browser layout editor controls for panel size and widget label/font/icon/lock settings, with helper logic for selecting, moving, and resizing unlocked widgets
 
 Long-term:
 
@@ -105,4 +108,5 @@ Long-term:
 - Tauri/Svelte or Tauri/React panel designer
 - WebSocket live sensor feed
 - Second-monitor fullscreen display mode
-- `.ospanel` template export/import format
+- Full `.ospanel` file UI with binary asset storage from the browser
+- Native drag handles and resize handles in the visual designer

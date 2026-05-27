@@ -44,6 +44,7 @@ DEFAULT_TEMPLATE: dict[str, Any] = {
             "path": "assets/opensensorpanel-logo.svg",
             "license": "project-created",
             "source": "OpenSensorPanel project",
+            "redistributable": True,
         }
     ],
     "widgets": [
@@ -127,6 +128,8 @@ def _validate_assets(assets: Any) -> set[str]:
             raise TemplateValidationError("template asset type must be icon, logo, or background")
         if not asset["path"].startswith("assets/") or ".." in asset["path"].split("/"):
             raise TemplateValidationError("template asset path must stay under assets/")
+        if "redistributable" in asset and not isinstance(asset["redistributable"], bool):
+            raise TemplateValidationError("template asset redistributable must be a boolean")
         asset_ids.add(asset["id"])
     return asset_ids
 
@@ -152,6 +155,12 @@ def validate_template(template: dict[str, Any]) -> dict[str, Any]:
     hero_sensor_ids = template.get("hero_sensor_ids")
     if not isinstance(hero_sensor_ids, list) or not all(isinstance(sensor_id, str) for sensor_id in hero_sensor_ids):
         raise TemplateValidationError("template hero_sensor_ids must be a list of strings")
+
+    sensor_mappings = template.get("sensor_mappings", {})
+    if not isinstance(sensor_mappings, dict) or not all(
+        isinstance(source, str) and isinstance(target, str) for source, target in sensor_mappings.items()
+    ):
+        raise TemplateValidationError("template sensor_mappings must be an object of string sensor ids")
 
     groups = template.get("groups")
     if not isinstance(groups, list):
@@ -184,3 +193,12 @@ def validate_template(template: dict[str, Any]) -> dict[str, Any]:
                 raise TemplateValidationError("template widget icon_asset_id must reference a declared asset")
 
     return deepcopy(template)
+
+
+def map_template_sensors(template: dict[str, Any]) -> dict[str, Any]:
+    mapped = validate_template(template)
+    sensor_mappings = mapped.get("sensor_mappings", {})
+    mapped["hero_sensor_ids"] = [sensor_mappings.get(sensor_id, sensor_id) for sensor_id in mapped.get("hero_sensor_ids", [])]
+    for widget in mapped.get("widgets", []):
+        widget["sensor_id"] = sensor_mappings.get(widget["sensor_id"], widget["sensor_id"])
+    return mapped

@@ -29,6 +29,7 @@ def available_sensors(snapshot: dict[str, Any]) -> dict[str, Any]:
 
 WEB_APP_JS = """
 const SELECTED_SENSOR_IDS_KEY = 'opensensorpanel.selectedSensorIds';
+const CUSTOM_TEMPLATE_KEY = 'opensensorpanel.customTemplate';
 const DEFAULT_DASHBOARD_TEMPLATE = {
   schema_version: 1,
   title: 'OpenSensorPanel',
@@ -54,7 +55,7 @@ const DEFAULT_DASHBOARD_TEMPLATE = {
     {category: 'pwm', label: 'PWM'},
   ],
   assets: [
-    {id: 'asset.logo.opensensorpanel', type: 'logo', path: 'assets/opensensorpanel-logo.svg', license: 'project-created', source: 'OpenSensorPanel project'},
+    {id: 'asset.logo.opensensorpanel', type: 'logo', path: 'assets/opensensorpanel-logo.svg', license: 'project-created', source: 'OpenSensorPanel project', redistributable: true},
   ],
   widgets: [
     {id: 'widget.cpu.used', sensor_id: 'cpu.total.used_percent', label: 'CPU', x: 32, y: 32, width: 220, height: 130, font_family: 'Inter, system-ui, sans-serif', label_size: 18, value_size: 48, locked: false},
@@ -106,6 +107,44 @@ function saveSelectedSensorIds(sensorIds) {
     return;
   }
   localStorage.setItem(SELECTED_SENSOR_IDS_KEY, JSON.stringify(sensorIds));
+}
+
+function saveCustomTemplate(template) {
+  if (typeof localStorage === 'undefined') {
+    return;
+  }
+  localStorage.setItem(CUSTOM_TEMPLATE_KEY, JSON.stringify(template));
+}
+
+function loadCustomTemplate() {
+  if (typeof localStorage === 'undefined') {
+    return null;
+  }
+  try {
+    const saved = JSON.parse(localStorage.getItem(CUSTOM_TEMPLATE_KEY) || 'null');
+    return saved && typeof saved === 'object' ? saved : null;
+  } catch {
+    return null;
+  }
+}
+
+function exportTemplateJson(template = dashboardTemplate) {
+  return JSON.stringify(template, null, 2);
+}
+
+function addLocalAsset(template, fileName, assetType = 'icon') {
+  template.assets = template.assets || [];
+  const safeName = String(fileName).replace(/[^a-zA-Z0-9._-]/g, '-');
+  const asset = {
+    id: `asset.user.${Date.now()}.${safeName}`,
+    type: assetType,
+    path: `assets/${safeName}`,
+    license: 'user-imported-personal-use',
+    source: 'browser local file',
+    redistributable: false,
+  };
+  template.assets.push(asset);
+  return asset;
 }
 
 function selectVisibleSensors(sensors, selectedSensorIds) {
@@ -197,11 +236,35 @@ function updateWidgetDesign(template, widgetId, changes) {
   if (!widget) {
     return;
   }
-  for (const key of ['label', 'font_family', 'label_size', 'value_size', 'locked']) {
+  for (const key of ['label', 'font_family', 'label_size', 'value_size', 'locked', 'icon_asset_id']) {
     if (Object.prototype.hasOwnProperty.call(changes, key)) {
       widget[key] = ['label_size', 'value_size'].includes(key) ? Number(changes[key]) : changes[key];
     }
   }
+}
+
+function selectLayoutWidget(template, widgetId) {
+  if ((template.widgets || []).some(widget => widget.id === widgetId)) {
+    template.selected_widget_id = widgetId;
+  }
+}
+
+function moveLayoutWidget(template, widgetId, x, y) {
+  const widget = (template.widgets || []).find(candidate => candidate.id === widgetId);
+  if (!widget || widget.locked) {
+    return;
+  }
+  widget.x = Number(x);
+  widget.y = Number(y);
+}
+
+function resizeLayoutWidget(template, widgetId, width, height) {
+  const widget = (template.widgets || []).find(candidate => candidate.id === widgetId);
+  if (!widget || widget.locked) {
+    return;
+  }
+  widget.width = Number(width);
+  widget.height = Number(height);
 }
 
 function populateLayoutEditorControls() {
@@ -305,7 +368,7 @@ async function loadSensorPicker() {
 
 async function loadTemplate() {
   const response = await fetch('/api/template');
-  dashboardTemplate = await response.json();
+  dashboardTemplate = loadCustomTemplate() || await response.json();
 }
 
 async function startOpenSensorPanel() {
@@ -390,10 +453,20 @@ INDEX_HTML = """<!doctype html>
         <label>Panel height <input id="panel-height" type="number" min="100" step="1"></label>
         <label>Custom label <input id="widget-label" type="text" placeholder="CPU, GPU Temp, etc."></label>
         <label>Font family <input id="widget-font-family" type="text" placeholder="Inter, Orbitron, monospace"></label>
+        <label>Icon/logo asset <select id="widget-icon-asset"><option value="">No icon</option></select></label>
         <label>Label size <input id="widget-label-size" type="number" min="8" step="1"></label>
         <label>Value size <input id="widget-value-size" type="number" min="12" step="1"></label>
         <label><input id="widget-locked" type="checkbox"> Lock selected item position</label>
-        <p class="hint">MVP editor schema supports borderless panel size, fixed widget positions, custom labels, font choices, sizes, and locked items.</p>
+        <div class="template-tools" aria-label="Template import export controls">
+          <button id="template-export-button" class="button" type="button">Export .ospanel</button>
+          <label>Import .ospanel <input id="template-import-file" type="file" accept=".ospanel,application/zip"></label>
+          <label>Add icon/logo/background <input id="asset-upload-file" type="file" accept="image/*,.svg"></label>
+        </div>
+        <section id="sensor-mapping-panel" aria-label="Sensor remapping panel">
+          <h3>Sensor Remapping</h3>
+          <p class="hint">Imported templates can map old sensor names, like AIDA64 labels, to this PC's Linux sensor IDs.</p>
+        </section>
+        <p class="hint">MVP editor schema supports borderless panel size, fixed widget positions, custom labels, font choices, sizes, custom icons/logos/background assets, sensor remapping, and locked items.</p>
       </aside>
     </section>
     <section id="sensor-groups" aria-label="Grouped sensors"></section>

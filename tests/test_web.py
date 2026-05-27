@@ -296,3 +296,68 @@ def test_home_page_contains_sensor_picker_shell():
         assert "selected-sensors" in html
     finally:
         server.shutdown()
+
+
+def test_web_app_selects_updates_moves_and_resizes_layout_widgets():
+    script = f"""
+{WEB_APP_JS}
+const template = {{
+  widgets: [
+    {{id: 'widget.cpu', x: 10, y: 20, width: 180, height: 90, locked: false}},
+    {{id: 'widget.locked', x: 1, y: 2, width: 100, height: 50, locked: true}},
+  ]
+}};
+selectLayoutWidget(template, 'widget.cpu');
+moveLayoutWidget(template, 'widget.cpu', 35, 45);
+resizeLayoutWidget(template, 'widget.cpu', 220, 110);
+moveLayoutWidget(template, 'widget.locked', 99, 99);
+console.log(JSON.stringify({{
+  selected: template.selected_widget_id,
+  moved: template.widgets[0],
+  locked: template.widgets[1],
+}}));
+"""
+
+    output = subprocess.check_output(["node", "-e", script], text=True)
+    result = json.loads(output)
+
+    assert result["selected"] == "widget.cpu"
+    assert result["moved"]["x"] == 35
+    assert result["moved"]["y"] == 45
+    assert result["moved"]["width"] == 220
+    assert result["moved"]["height"] == 110
+    assert result["locked"]["x"] == 1
+    assert result["locked"]["y"] == 2
+
+
+def test_web_app_saves_and_loads_custom_template_from_browser_storage():
+    script = f"""
+{WEB_APP_JS}
+global.localStorage = {{
+  data: {{}},
+  setItem(key, value) {{ this.data[key] = value; }},
+  getItem(key) {{ return this.data[key] || null; }},
+}};
+const template = {{schema_version: 1, title: 'Custom', widgets: [{{id: 'widget.cpu'}}]}};
+saveCustomTemplate(template);
+console.log(JSON.stringify(loadCustomTemplate()));
+"""
+
+    output = subprocess.check_output(["node", "-e", script], text=True)
+
+    assert json.loads(output)["title"] == "Custom"
+
+
+def test_home_page_contains_template_asset_and_import_export_controls():
+    handler = make_handler(lambda: {"schema_version": 1, "updated_at": "now", "sensors": []})
+    server, base_url = _serve_once(handler)
+    try:
+        with urllib.request.urlopen(base_url) as response:
+            html = response.read().decode()
+        assert "template-export-button" in html
+        assert "template-import-file" in html
+        assert "asset-upload-file" in html
+        assert "widget-icon-asset" in html
+        assert "sensor-mapping-panel" in html
+    finally:
+        server.shutdown()

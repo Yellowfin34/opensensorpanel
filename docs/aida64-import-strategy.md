@@ -74,8 +74,8 @@ Sensor IDs will need remapping because AIDA64 sensor names do not equal Linux/Op
 
 ## Next implementation tasks
 
-1. Add `.ospanel` ZIP package format with `template.json` and `assets/`.
-2. Add asset license metadata and export filtering.
-3. Add a local-only AIDA64 import command that inspects file type/contents without redistributing assets.
-4. Add a sensor-mapping screen for imported templates.
-5. Add user-facing license warnings before export/share.
+1. Add `.ospanel` ZIP package format with `template.json` and `assets/`. ✅ first tested foundation added in code
+2. Add asset license metadata and export filtering. ✅ public export blocks personal-use/non-redistributable assets
+3. Add a local-only AIDA64 import command that inspects file type/contents without redistributing assets. ✅ inspector foundation added; CLI wiring still pending
+4. Add a sensor-mapping screen for imported templates. ✅ schema/UI placeholder foundation added; real mapping workflow still pending
+5. Add user-facing license warnings before export/share. 🚧 policy documented; fuller UI warning still pending

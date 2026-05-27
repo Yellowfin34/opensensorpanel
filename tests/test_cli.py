@@ -48,3 +48,38 @@ def test_cli_serve_starts_web_server(monkeypatch):
 
     assert cli.main(["serve", "--host", "0.0.0.0", "--port", "9999"]) == 0
     assert called == {"host": "0.0.0.0", "port": 9999}
+
+
+
+def test_cli_inspect_aida64_prints_personal_use_report(tmp_path, capsys):
+    sensorpanel = tmp_path / "gaming.sensorpanel"
+    sensorpanel.write_bytes(b"example")
+
+    assert cli.main(["inspect-aida64", str(sensorpanel)]) == 0
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["source_format"] == "aida64-sensorpanel"
+    assert payload["recommended_license"] == "user-imported-personal-use"
+    assert payload["redistributable"] is False
+
+
+def test_cli_export_template_writes_ospanel_package(tmp_path, capsys):
+    output = tmp_path / "default.ospanel"
+
+    assert cli.main(["template", "export", str(output)]) == 0
+
+    assert output.exists()
+    assert "Exported template package" in capsys.readouterr().out
+
+
+def test_cli_import_template_prints_summary(tmp_path, capsys):
+    output = tmp_path / "default.ospanel"
+    assert cli.main(["template", "export", str(output)]) == 0
+    capsys.readouterr()
+
+    assert cli.main(["template", "import", str(output)]) == 0
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["title"] == "OpenSensorPanel"
+    assert payload["widgets"] == 4
+    assert payload["assets"] == 0

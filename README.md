@@ -81,6 +81,30 @@ http://127.0.0.1:8766/api/template
 
 `/api/snapshot` returns current values. `/api/sensors` returns metadata for the sensor picker. `/api/template` returns the current layout template.
 
+## Template workflows
+
+Export the built-in starter template to an `.ospanel` package:
+
+```bash
+opensensorpanel template export ~/OpenSensorPanel-default.ospanel
+```
+
+Inspect an `.ospanel` package before importing it:
+
+```bash
+opensensorpanel template import ~/OpenSensorPanel-default.ospanel
+```
+
+Inspect a user-owned AIDA64 `.sensorpanel` file without redistributing anything:
+
+```bash
+opensensorpanel inspect-aida64 ~/Downloads/my-panel.sensorpanel
+```
+
+The AIDA64 inspector is intentionally local/personal-use. Imported AIDA64/community/paid template art should stay marked `user-imported-personal-use` and `redistributable: false` unless the user has clear rights to share it.
+
+In the web UI, the **Layout Settings** panel now includes the workflow controls for exporting template JSON, importing template JSON, adding local icon/logo/background metadata, selecting an icon/logo for a widget, and preparing sensor remapping for imported templates.
+
 ## Run tests
 
 ```bash

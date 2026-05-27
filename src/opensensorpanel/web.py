@@ -132,6 +132,38 @@ function exportTemplateJson(template = dashboardTemplate) {
   return JSON.stringify(template, null, 2);
 }
 
+function exportTemplateDownload(template = dashboardTemplate) {
+  const blob = new Blob([exportTemplateJson(template)], {type: 'application/json'});
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = 'opensensorpanel-template.json';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  return link;
+}
+
+function importTemplateJsonText(text) {
+  const template = JSON.parse(text);
+  saveCustomTemplate(template);
+  dashboardTemplate = template;
+  return template;
+}
+
+function assetOptionsHtml(template = dashboardTemplate) {
+  return '<option value="">No icon</option>' + (template.assets || [])
+    .filter(asset => asset.type === 'icon' || asset.type === 'logo')
+    .map(asset => `<option value="${asset.id}">${asset.type}: ${asset.id}</option>`)
+    .join('');
+}
+
+function populateAssetOptions() {
+  const select = document.querySelector('#widget-icon-asset');
+  if (select) {
+    select.innerHTML = assetOptionsHtml(dashboardTemplate);
+  }
+}
+
 function addLocalAsset(template, fileName, assetType = 'icon') {
   template.assets = template.assets || [];
   const safeName = String(fileName).replace(/[^a-zA-Z0-9._-]/g, '-');
@@ -277,6 +309,7 @@ function populateLayoutEditorControls() {
     document.querySelector('#widget-label-size').value = firstWidget.label_size;
     document.querySelector('#widget-value-size').value = firstWidget.value_size;
     document.querySelector('#widget-locked').checked = firstWidget.locked;
+    document.querySelector('#widget-icon-asset').value = firstWidget.icon_asset_id || '';
   }
 }
 
@@ -291,12 +324,36 @@ function setupLayoutEditorControls() {
         label_size: document.querySelector('#widget-label-size').value,
         value_size: document.querySelector('#widget-value-size').value,
         locked: document.querySelector('#widget-locked').checked,
+        icon_asset_id: document.querySelector('#widget-icon-asset').value,
       });
     }
     refresh();
   };
-  ['#panel-width', '#panel-height', '#widget-label', '#widget-font-family', '#widget-label-size', '#widget-value-size', '#widget-locked']
+  ['#panel-width', '#panel-height', '#widget-label', '#widget-font-family', '#widget-label-size', '#widget-value-size', '#widget-locked', '#widget-icon-asset']
     .forEach(selector => document.querySelector(selector).addEventListener('input', apply));
+}
+
+function setupTemplateWorkflowControls() {
+  document.querySelector('#template-export-button').addEventListener('click', () => exportTemplateDownload(dashboardTemplate));
+  document.querySelector('#template-import-file').addEventListener('change', async event => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+    importTemplateJsonText(await file.text());
+    populateLayoutEditorControls();
+    populateAssetOptions();
+    refresh();
+  });
+  document.querySelector('#asset-upload-file').addEventListener('change', event => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+    addLocalAsset(dashboardTemplate, file.name, file.type.startsWith('image/') ? 'icon' : 'logo');
+    saveCustomTemplate(dashboardTemplate);
+    populateAssetOptions();
+  });
 }
 
 function renderHeroStats(sensors) {
@@ -374,7 +431,9 @@ async function loadTemplate() {
 async function startOpenSensorPanel() {
   setupFullscreenButton();
   setupLayoutEditorControls();
+  setupTemplateWorkflowControls();
   await loadTemplate();
+  populateAssetOptions();
   populateLayoutEditorControls();
   await loadSensorPicker();
   await refresh();

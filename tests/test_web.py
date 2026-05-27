@@ -361,3 +361,69 @@ def test_home_page_contains_template_asset_and_import_export_controls():
         assert "sensor-mapping-panel" in html
     finally:
         server.shutdown()
+
+
+
+def test_web_app_exports_template_as_downloadable_json_blob():
+    script = f"""
+{WEB_APP_JS}
+global.URL = {{ createObjectURL(blob) {{ global.createdBlob = blob; return 'blob:template'; }} }};
+global.Blob = class {{ constructor(parts, options) {{ this.parts = parts; this.options = options; }} }};
+const link = {{ clickCalled: false, click() {{ this.clickCalled = true; }} }};
+global.document = {{ createElement(tag) {{ return link; }}, body: {{ appendChild() {{}}, removeChild() {{}} }} }};
+const result = exportTemplateDownload({{title: 'Custom', widgets: []}});
+console.log(JSON.stringify({{
+  href: result.href,
+  download: result.download,
+  clicked: result.clickCalled,
+  blobType: global.createdBlob.options.type,
+  body: global.createdBlob.parts[0],
+}}));
+"""
+
+    output = subprocess.check_output(["node", "-e", script], text=True)
+    result = json.loads(output)
+
+    assert result["href"] == "blob:template"
+    assert result["download"] == "opensensorpanel-template.json"
+    assert result["clicked"] is True
+    assert result["blobType"] == "application/json"
+    assert json.loads(result["body"])["title"] == "Custom"
+
+
+def test_web_app_imports_template_json_text_and_saves_it():
+    script = f"""
+{WEB_APP_JS}
+global.localStorage = {{
+  data: {{}},
+  setItem(key, value) {{ this.data[key] = value; }},
+  getItem(key) {{ return this.data[key] || null; }},
+}};
+const imported = importTemplateJsonText('{{"schema_version":1,"title":"Imported","hero_sensor_ids":[],"groups":[],"assets":[],"widgets":[]}}');
+console.log(JSON.stringify({{imported, saved: loadCustomTemplate()}}));
+"""
+
+    output = subprocess.check_output(["node", "-e", script], text=True)
+    result = json.loads(output)
+
+    assert result["imported"]["title"] == "Imported"
+    assert result["saved"]["title"] == "Imported"
+
+
+def test_web_app_builds_asset_options_for_icon_selector():
+    script = f"""
+{WEB_APP_JS}
+const template = {{assets: [
+  {{id: 'asset.logo', type: 'logo', path: 'assets/logo.svg'}},
+  {{id: 'asset.bg', type: 'background', path: 'assets/bg.png'}},
+  {{id: 'asset.icon.cpu', type: 'icon', path: 'assets/cpu.svg'}},
+]}};
+console.log(JSON.stringify(assetOptionsHtml(template)));
+"""
+
+    output = subprocess.check_output(["node", "-e", script], text=True)
+    html = json.loads(output)
+
+    assert 'value="asset.logo"' in html
+    assert 'value="asset.icon.cpu"' in html
+    assert 'asset.bg' not in html

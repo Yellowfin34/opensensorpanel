@@ -442,6 +442,118 @@ console.log(JSON.stringify(loadCustomTemplate()));
     assert json.loads(output)["title"] == "Custom"
 
 
+def test_web_app_updates_selected_widget_sensor_binding():
+    script = f"""
+{WEB_APP_JS}
+const template = {{
+  selected_widget_id: 'widget.gpu',
+  widgets: [
+    {{id: 'widget.cpu', sensor_id: 'cpu.total.used_percent', label: 'CPU'}},
+    {{id: 'widget.gpu', sensor_id: 'gpu.nvidia.0.temperature', label: 'GPU'}},
+  ]
+}};
+updateSelectedWidgetDesign(template, {{sensor_id: 'gpu.nvidia.0.power_watts'}});
+console.log(JSON.stringify(template.widgets));
+"""
+
+    output = subprocess.check_output(["node", "-e", script], text=True)
+    widgets = json.loads(output)
+
+    assert widgets[0]["sensor_id"] == "cpu.total.used_percent"
+    assert widgets[1]["sensor_id"] == "gpu.nvidia.0.power_watts"
+
+
+def test_web_app_builds_sensor_options_for_selected_widget_dropdown():
+    script = f"""
+{WEB_APP_JS}
+const sensors = [
+  {{id: 'cpu.total.used_percent', label: 'CPU Used', category: 'cpu', device: 'CPU', unit: '%'}},
+  {{id: 'memory.ram.used_percent', label: 'RAM Used', category: 'memory', device: 'System Memory', unit: '%'}},
+];
+console.log(JSON.stringify(sensorBindingOptionsHtml(sensors, 'memory.ram.used_percent')));
+"""
+
+    output = subprocess.check_output(["node", "-e", script], text=True)
+    html = json.loads(output)
+
+    assert 'value="cpu.total.used_percent"' in html
+    assert 'value="memory.ram.used_percent" selected' in html
+    assert 'memory: System Memory — RAM Used (%)' in html
+
+
+def test_web_app_duplicates_selected_widget_with_new_id_and_offset():
+    script = f"""
+{WEB_APP_JS}
+const template = {{
+  selected_widget_id: 'widget.cpu',
+  widgets: [{{id: 'widget.cpu', label: 'CPU', x: 10, y: 20, width: 100, height: 80, locked: false}}]
+}};
+const duplicate = duplicateSelectedWidget(template);
+console.log(JSON.stringify({{duplicate, template}}));
+"""
+
+    output = subprocess.check_output(["node", "-e", script], text=True)
+    result = json.loads(output)
+
+    assert result["duplicate"]["id"] == "widget.cpu.copy1"
+    assert result["duplicate"]["label"] == "CPU Copy"
+    assert result["duplicate"]["x"] == 34
+    assert result["duplicate"]["y"] == 44
+    assert result["template"]["selected_widget_id"] == "widget.cpu.copy1"
+    assert len(result["template"]["widgets"]) == 2
+
+
+def test_web_app_deletes_selected_widget_and_selects_neighbor():
+    script = f"""
+{WEB_APP_JS}
+const template = {{
+  selected_widget_id: 'widget.gpu',
+  widgets: [
+    {{id: 'widget.cpu', label: 'CPU'}},
+    {{id: 'widget.gpu', label: 'GPU'}},
+    {{id: 'widget.ram', label: 'RAM'}},
+  ]
+}};
+deleteSelectedWidget(template);
+console.log(JSON.stringify(template));
+"""
+
+    output = subprocess.check_output(["node", "-e", script], text=True)
+    template = json.loads(output)
+
+    assert [widget["id"] for widget in template["widgets"]] == ["widget.cpu", "widget.ram"]
+    assert template["selected_widget_id"] == "widget.ram"
+
+
+def test_web_app_updates_panel_background_color():
+    script = f"""
+{WEB_APP_JS}
+const template = {{panel: {{width: 800, height: 480, background: '#111827'}}}};
+updatePanelAppearance(template, '#ff00aa');
+console.log(JSON.stringify({{panel: template.panel, style: panelStyle(template)}}));
+"""
+
+    output = subprocess.check_output(["node", "-e", script], text=True)
+    result = json.loads(output)
+
+    assert result["panel"]["background"] == "#ff00aa"
+    assert "background:#ff00aa;" in result["style"]
+
+
+def test_home_page_contains_widget_actions_sensor_binding_and_background_controls():
+    handler = make_handler(lambda: {"schema_version": 1, "updated_at": "now", "sensors": []})
+    server, base_url = _serve_once(handler)
+    try:
+        with urllib.request.urlopen(base_url) as response:
+            html = response.read().decode()
+        assert "widget-sensor-id" in html
+        assert "panel-background" in html
+        assert "duplicate-widget-button" in html
+        assert "delete-widget-button" in html
+    finally:
+        server.shutdown()
+
+
 def test_home_page_contains_template_asset_and_import_export_controls():
     handler = make_handler(lambda: {"schema_version": 1, "updated_at": "now", "sensors": []})
     server, base_url = _serve_once(handler)

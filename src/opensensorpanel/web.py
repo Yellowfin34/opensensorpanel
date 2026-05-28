@@ -66,6 +66,7 @@ const DEFAULT_DASHBOARD_TEMPLATE = {
 };
 let dashboardTemplate = DEFAULT_DASHBOARD_TEMPLATE;
 let lastRenderedSensors = [];
+let latestAvailableSensors = [];
 
 function formatNumber(value) {
   if (Number.isInteger(value)) {
@@ -267,12 +268,17 @@ function updatePanelSize(template, width, height) {
   template.panel.height = Number(height);
 }
 
+function updatePanelAppearance(template, background) {
+  template.panel = template.panel || {};
+  template.panel.background = background;
+}
+
 function updateWidgetDesign(template, widgetId, changes) {
   const widget = (template.widgets || []).find(candidate => candidate.id === widgetId);
   if (!widget) {
     return;
   }
-  for (const key of ['label', 'font_family', 'label_size', 'value_size', 'locked', 'icon_asset_id']) {
+  for (const key of ['label', 'font_family', 'label_size', 'value_size', 'locked', 'icon_asset_id', 'sensor_id']) {
     if (Object.prototype.hasOwnProperty.call(changes, key)) {
       widget[key] = ['label_size', 'value_size'].includes(key) ? Number(changes[key]) : changes[key];
     }
@@ -282,6 +288,49 @@ function updateWidgetDesign(template, widgetId, changes) {
 function selectedLayoutWidget(template = dashboardTemplate) {
   const widgets = template.widgets || [];
   return widgets.find(widget => widget.id === template.selected_widget_id) || widgets[0] || null;
+}
+
+function widgetIdCopy(template, sourceId) {
+  const existing = new Set((template.widgets || []).map(widget => widget.id));
+  let index = 1;
+  let candidate = `${sourceId}.copy${index}`;
+  while (existing.has(candidate)) {
+    index += 1;
+    candidate = `${sourceId}.copy${index}`;
+  }
+  return candidate;
+}
+
+function duplicateSelectedWidget(template) {
+  const source = selectedLayoutWidget(template);
+  if (!source) {
+    return null;
+  }
+  const duplicate = {
+    ...source,
+    id: widgetIdCopy(template, source.id),
+    label: `${source.label || 'Widget'} Copy`,
+    x: Number(source.x || 0) + 24,
+    y: Number(source.y || 0) + 24,
+    locked: false,
+  };
+  template.widgets = template.widgets || [];
+  template.widgets.push(duplicate);
+  template.selected_widget_id = duplicate.id;
+  return duplicate;
+}
+
+function deleteSelectedWidget(template) {
+  const widgets = template.widgets || [];
+  const selectedId = selectedLayoutWidget(template)?.id;
+  const index = widgets.findIndex(widget => widget.id === selectedId);
+  if (index < 0) {
+    return null;
+  }
+  const removed = widgets.splice(index, 1)[0];
+  const next = widgets[Math.min(index, widgets.length - 1)] || null;
+  template.selected_widget_id = next ? next.id : null;
+  return removed;
 }
 
 function updateSelectedWidgetDesign(template, changes) {
@@ -405,7 +454,9 @@ function populateLayoutEditorControls() {
   const widget = selectedLayoutWidget(dashboardTemplate);
   document.querySelector('#panel-width').value = dashboardTemplate.panel?.width || '';
   document.querySelector('#panel-height').value = dashboardTemplate.panel?.height || '';
+  document.querySelector('#panel-background').value = dashboardTemplate.panel?.background || '#080b12';
   document.querySelector('#selected-widget-name').textContent = widget ? widget.label : 'No widget selected';
+  populateSensorBindingOptions();
   if (widget) {
     document.querySelector('#widget-label').value = widget.label;
     document.querySelector('#widget-font-family').value = widget.font_family;
@@ -413,6 +464,7 @@ function populateLayoutEditorControls() {
     document.querySelector('#widget-value-size').value = widget.value_size;
     document.querySelector('#widget-locked').checked = widget.locked;
     document.querySelector('#widget-icon-asset').value = widget.icon_asset_id || '';
+    document.querySelector('#widget-sensor-id').value = widget.sensor_id || '';
   }
 }
 
@@ -420,7 +472,9 @@ function setupLayoutEditorControls() {
   const apply = () => {
     applyEditorMutation(() => {
       updatePanelSize(dashboardTemplate, document.querySelector('#panel-width').value, document.querySelector('#panel-height').value);
+      updatePanelAppearance(dashboardTemplate, document.querySelector('#panel-background').value);
       updateSelectedWidgetDesign(dashboardTemplate, {
+        sensor_id: document.querySelector('#widget-sensor-id').value,
         label: document.querySelector('#widget-label').value,
         font_family: document.querySelector('#widget-font-family').value,
         label_size: document.querySelector('#widget-label-size').value,
@@ -431,8 +485,18 @@ function setupLayoutEditorControls() {
     });
     refresh();
   };
-  ['#panel-width', '#panel-height', '#widget-label', '#widget-font-family', '#widget-label-size', '#widget-value-size', '#widget-locked', '#widget-icon-asset']
+  ['#panel-width', '#panel-height', '#panel-background', '#widget-sensor-id', '#widget-label', '#widget-font-family', '#widget-label-size', '#widget-value-size', '#widget-locked', '#widget-icon-asset']
     .forEach(selector => document.querySelector(selector).addEventListener('input', apply));
+  document.querySelector('#duplicate-widget-button').addEventListener('click', () => {
+    applyEditorMutation(() => duplicateSelectedWidget(dashboardTemplate));
+    populateLayoutEditorControls();
+    refresh();
+  });
+  document.querySelector('#delete-widget-button').addEventListener('click', () => {
+    applyEditorMutation(() => deleteSelectedWidget(dashboardTemplate));
+    populateLayoutEditorControls();
+    refresh();
+  });
 }
 
 function setupTemplateWorkflowControls() {
@@ -487,6 +551,21 @@ function sensorOptionLabel(sensor) {
   return `${sensor.category}: ${sensor.device} — ${sensor.label} (${sensor.unit})`;
 }
 
+function sensorBindingOptionsHtml(sensors, selectedSensorId = '') {
+  return '<option value="">No sensor bound</option>' + (sensors || [])
+    .map(sensor => `<option value="${sensor.id}" ${sensor.id === selectedSensorId ? 'selected' : ''}>${sensorOptionLabel(sensor)}</option>`)
+    .join('');
+}
+
+function populateSensorBindingOptions(sensors = latestAvailableSensors) {
+  const select = document.querySelector('#widget-sensor-id');
+  if (!select) {
+    return;
+  }
+  const widget = selectedLayoutWidget(dashboardTemplate);
+  select.innerHTML = sensorBindingOptionsHtml(sensors, widget?.sensor_id || '');
+}
+
 function renderSensorPicker(sensors) {
   const selected = new Set(loadSelectedSensorIds());
   document.querySelector('#selected-sensors').innerHTML = sensors.map(sensor => `
@@ -523,6 +602,8 @@ async function refresh() {
 async function loadSensorPicker() {
   const response = await fetch('/api/sensors');
   const data = await response.json();
+  latestAvailableSensors = data.sensors;
+  populateSensorBindingOptions(latestAvailableSensors);
   renderSensorPicker(data.sensors);
 }
 
@@ -564,6 +645,8 @@ INDEX_HTML = """<!doctype html>
     .subtitle { color: #94a3b8; margin: 0; }
     .button { background: #2563eb; color: white; border: 0; border-radius: 999px; padding: .65rem 1rem; font-weight: 700; cursor: pointer; box-shadow: 0 10px 24px #1d4ed855; }
     .button:hover { background: #3b82f6; }
+    .secondary-button { background: #334155; box-shadow: none; }
+    .danger-button { background: #b91c1c; box-shadow: none; }
     .hero-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; margin-top: 1.5rem; }
     .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 1rem; }
     .card { background: linear-gradient(135deg, #121827, #1d2638); border: 1px solid #2a3750; border-radius: 18px; padding: 1rem; box-shadow: 0 14px 30px #0008; }
@@ -584,7 +667,8 @@ INDEX_HTML = """<!doctype html>
     .resize-handle { position: absolute; right: 4px; bottom: 4px; width: 16px; height: 16px; border: 0; border-radius: 4px; background: linear-gradient(135deg, transparent 45%, #38bdf8 46%); cursor: nwse-resize; }
     .editor-controls { background: #0f1724; border: 1px solid #263449; border-radius: 18px; padding: 1rem; }
     .editor-controls label { display: grid; gap: .25rem; margin: .6rem 0; color: #bfdbfe; font-size: .9rem; }
-    .editor-controls input { background: #020617; color: #f8fafc; border: 1px solid #334155; border-radius: 8px; padding: .45rem; }
+    .editor-controls input, .editor-controls select { background: #020617; color: #f8fafc; border: 1px solid #334155; border-radius: 8px; padding: .45rem; }
+    .widget-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin: .75rem 0; }
     .picker { margin-top: 2rem; background: #0f1724; border: 1px solid #263449; border-radius: 18px; padding: 1rem; }
     .sensor-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: .5rem; }
     .sensor-option { display: flex; gap: .5rem; align-items: center; color: #dbeafe; font-size: .9rem; }
@@ -616,12 +700,18 @@ INDEX_HTML = """<!doctype html>
         <p class="hint">Selected: <strong id="selected-widget-name">No widget selected</strong></p>
         <label>Panel width <input id="panel-width" type="number" min="100" step="1"></label>
         <label>Panel height <input id="panel-height" type="number" min="100" step="1"></label>
+        <label>Panel background <input id="panel-background" type="color" value="#080b12"></label>
+        <label>Widget sensor <select id="widget-sensor-id"><option value="">No sensor bound</option></select></label>
         <label>Custom label <input id="widget-label" type="text" placeholder="CPU, GPU Temp, etc."></label>
         <label>Font family <input id="widget-font-family" type="text" placeholder="Inter, Orbitron, monospace"></label>
         <label>Icon/logo asset <select id="widget-icon-asset"><option value="">No icon</option></select></label>
         <label>Label size <input id="widget-label-size" type="number" min="8" step="1"></label>
         <label>Value size <input id="widget-value-size" type="number" min="12" step="1"></label>
         <label><input id="widget-locked" type="checkbox"> Lock selected item position</label>
+        <div class="widget-actions" aria-label="Widget actions">
+          <button id="duplicate-widget-button" class="button secondary-button" type="button">Duplicate Widget</button>
+          <button id="delete-widget-button" class="button danger-button" type="button">Delete Widget</button>
+        </div>
         <div class="template-tools" aria-label="Template import export controls">
           <button id="template-export-button" class="button" type="button">Export .ospanel</button>
           <label>Import .ospanel <input id="template-import-file" type="file" accept=".ospanel,application/zip"></label>

@@ -28,7 +28,14 @@ def test_default_template_declares_hero_and_group_layout():
 def test_default_template_declares_borderless_panel_size_and_positioned_widgets():
     template = validate_template(DEFAULT_TEMPLATE)
 
-    assert template["panel"] == {"width": 1024, "height": 600, "borderless": True, "background": "#080b12"}
+    assert template["panel"] == {
+        "width": 1024,
+        "height": 600,
+        "borderless": True,
+        "background": "#080b12",
+        "grid_size": 10,
+        "snap_to_grid": False,
+    }
     assert template["widgets"][0] == {
         "id": "widget.cpu.used",
         "sensor_id": "cpu.total.used_percent",
@@ -83,6 +90,16 @@ def test_validate_template_rejects_asset_path_outside_template_assets():
     }
 
     with pytest.raises(TemplateValidationError, match="asset path"):
+        validate_template(bad_template)
+
+
+def test_validate_template_rejects_panel_background_that_does_not_reference_asset():
+    bad_template = {
+        **DEFAULT_TEMPLATE,
+        "panel": {**DEFAULT_TEMPLATE["panel"], "background_asset_id": "asset.missing"},
+    }
+
+    with pytest.raises(TemplateValidationError, match="background_asset_id"):
         validate_template(bad_template)
 
 

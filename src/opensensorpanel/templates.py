@@ -16,6 +16,8 @@ DEFAULT_TEMPLATE: dict[str, Any] = {
         "height": 600,
         "borderless": True,
         "background": "#080b12",
+        "grid_size": 10,
+        "snap_to_grid": False,
     },
     "hero_sensor_ids": [
         "cpu.total.used_percent",
@@ -151,6 +153,12 @@ def validate_template(template: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(panel.get("borderless"), bool):
             raise TemplateValidationError("template panel borderless must be a boolean")
         _require_string(panel, "background", "panel")
+        if "grid_size" in panel:
+            _require_number(panel, "grid_size", "panel")
+            if panel["grid_size"] <= 0:
+                raise TemplateValidationError("template panel grid_size must be positive")
+        if "snap_to_grid" in panel and not isinstance(panel["snap_to_grid"], bool):
+            raise TemplateValidationError("template panel snap_to_grid must be a boolean")
 
     hero_sensor_ids = template.get("hero_sensor_ids")
     if not isinstance(hero_sensor_ids, list) or not all(isinstance(sensor_id, str) for sensor_id in hero_sensor_ids):
@@ -172,6 +180,10 @@ def validate_template(template: dict[str, Any]) -> dict[str, Any]:
         _require_string(group, "label", "group")
 
     asset_ids = _validate_assets(template.get("assets", []))
+    if panel is not None and "background_asset_id" in panel:
+        _require_string(panel, "background_asset_id", "panel")
+        if panel["background_asset_id"] not in asset_ids:
+            raise TemplateValidationError("template panel background_asset_id must reference a declared asset")
 
     widgets = template.get("widgets", [])
     if not isinstance(widgets, list):

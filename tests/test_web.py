@@ -195,7 +195,7 @@ console.log(panelStyle(template));
 
     output = subprocess.check_output(["node", "-e", script], text=True)
 
-    assert output.strip() == "width:800px;height:480px;background:#111827;"
+    assert output.strip() == "width:800px;height:480px;background-color:#111827;"
 
 
 def test_web_app_renders_positioned_widget_with_custom_label_font_and_lock_state():
@@ -537,7 +537,7 @@ console.log(JSON.stringify({{panel: template.panel, style: panelStyle(template)}
     result = json.loads(output)
 
     assert result["panel"]["background"] == "#ff00aa"
-    assert "background:#ff00aa;" in result["style"]
+    assert "background-color:#ff00aa;" in result["style"]
 
 
 def test_home_page_contains_widget_actions_sensor_binding_and_background_controls():
@@ -633,3 +633,143 @@ console.log(JSON.stringify(assetOptionsHtml(template)));
     assert 'value="asset.logo"' in html
     assert 'value="asset.icon.cpu"' in html
     assert 'asset.bg' not in html
+
+
+def test_web_app_applies_background_image_asset_to_panel_style():
+    script = f"""
+{WEB_APP_JS}
+dashboardTemplate = {{
+  panel: {{width: 800, height: 480, background: '#111827', background_asset_id: 'asset.bg'}},
+  assets: [{{id: 'asset.bg', type: 'background', path: 'assets/carbon.png'}}],
+}};
+console.log(JSON.stringify(panelStyle(dashboardTemplate)));
+"""
+
+    output = subprocess.check_output(["node", "-e", script], text=True)
+    style = json.loads(output)
+
+    assert "background-color:#111827;" in style
+    assert "background-image:url('assets/carbon.png');" in style
+    assert "background-size:cover;" in style
+
+
+def test_web_app_builds_background_asset_options():
+    script = f"""
+{WEB_APP_JS}
+const template = {{assets: [
+  {{id: 'asset.logo', type: 'logo', path: 'assets/logo.svg'}},
+  {{id: 'asset.bg', type: 'background', path: 'assets/bg.png'}},
+]}};
+console.log(JSON.stringify(backgroundAssetOptionsHtml(template, 'asset.bg')));
+"""
+
+    output = subprocess.check_output(["node", "-e", script], text=True)
+    html = json.loads(output)
+
+    assert 'value="asset.bg" selected' in html
+    assert 'asset.logo' not in html
+
+
+def test_web_app_snaps_drag_and_resize_to_grid_when_enabled():
+    script = f"""
+{WEB_APP_JS}
+const template = {{
+  panel: {{width: 400, height: 300, grid_size: 10, snap_to_grid: true}},
+  widgets: [{{id: 'widget.cpu', x: 3, y: 6, width: 103, height: 77, locked: false}}]
+}};
+moveLayoutWidget(template, 'widget.cpu', 27, 34);
+resizeLayoutWidget(template, 'widget.cpu', 126, 93);
+console.log(JSON.stringify(template.widgets[0]));
+"""
+
+    output = subprocess.check_output(["node", "-e", script], text=True)
+    widget = json.loads(output)
+
+    assert widget["x"] == 30
+    assert widget["y"] == 30
+    assert widget["width"] == 130
+    assert widget["height"] == 90
+
+
+def test_web_app_finds_alignment_snap_position_near_other_widget_edges():
+    script = f"""
+{WEB_APP_JS}
+const template = {{widgets: [
+  {{id: 'widget.a', x: 10, y: 20, width: 100, height: 50}},
+  {{id: 'widget.b', x: 204, y: 75, width: 80, height: 40}},
+]}};
+console.log(JSON.stringify(snapWidgetToAlignment(template, 'widget.b', 108, 68)));
+"""
+
+    output = subprocess.check_output(["node", "-e", script], text=True)
+    snapped = json.loads(output)
+
+    assert snapped["x"] == 110
+    assert snapped["y"] == 70
+
+
+def test_web_app_tracks_undo_and_redo_for_editor_mutations():
+    script = f"""
+{WEB_APP_JS}
+dashboardTemplate = {{
+  panel: {{width: 300, height: 200}},
+  widgets: [{{id: 'widget.cpu', x: 0, y: 0, width: 100, height: 80, locked: false}}]
+}};
+applyEditorMutation(() => moveLayoutWidget(dashboardTemplate, 'widget.cpu', 30, 40));
+undoEditorMutation();
+const afterUndo = JSON.parse(JSON.stringify(dashboardTemplate));
+redoEditorMutation();
+console.log(JSON.stringify({{afterUndo, afterRedo: dashboardTemplate}}));
+"""
+
+    output = subprocess.check_output(["node", "-e", script], text=True)
+    result = json.loads(output)
+
+    assert result["afterUndo"]["widgets"][0]["x"] == 0
+    assert result["afterUndo"]["widgets"][0]["y"] == 0
+    assert result["afterRedo"]["widgets"][0]["x"] == 30
+    assert result["afterRedo"]["widgets"][0]["y"] == 40
+
+
+def test_web_app_saves_loads_and_resets_named_local_templates():
+    script = f"""
+{WEB_APP_JS}
+global.localStorage = {{
+  data: {{}},
+  setItem(key, value) {{ this.data[key] = value; }},
+  getItem(key) {{ return this.data[key] || null; }},
+  removeItem(key) {{ delete this.data[key]; }},
+}};
+const template = {{title: 'Gaming Rig', widgets: [{{id: 'widget.cpu'}}]}};
+saveNamedTemplate('Gaming', template);
+const loaded = loadNamedTemplate('Gaming');
+const names = listNamedTemplates();
+resetNamedTemplate('Gaming');
+console.log(JSON.stringify({{names, loaded, afterReset: loadNamedTemplate('Gaming')}}));
+"""
+
+    output = subprocess.check_output(["node", "-e", script], text=True)
+    result = json.loads(output)
+
+    assert result["names"] == ["Gaming"]
+    assert result["loaded"]["title"] == "Gaming Rig"
+    assert result["afterReset"] is None
+
+
+def test_home_page_contains_advanced_editor_controls():
+    handler = make_handler(lambda: {"schema_version": 1, "updated_at": "now", "sensors": []})
+    server, base_url = _serve_once(handler)
+    try:
+        with urllib.request.urlopen(base_url) as response:
+            html = response.read().decode()
+        assert "panel-background-asset" in html
+        assert "snap-to-grid" in html
+        assert "grid-size" in html
+        assert "undo-layout-button" in html
+        assert "redo-layout-button" in html
+        assert "template-name" in html
+        assert "save-template-button" in html
+        assert "load-template-button" in html
+        assert "reset-template-button" in html
+    finally:
+        server.shutdown()

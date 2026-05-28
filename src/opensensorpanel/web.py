@@ -65,6 +65,7 @@ const DEFAULT_DASHBOARD_TEMPLATE = {
   ],
 };
 let dashboardTemplate = DEFAULT_DASHBOARD_TEMPLATE;
+let lastRenderedSensors = [];
 
 function formatNumber(value) {
   if (Number.isInteger(value)) {
@@ -228,11 +229,13 @@ function panelStyle(template = dashboardTemplate) {
 function layoutWidgetHtml(widget, sensor) {
   const valueHtml = sensor ? formatSensorValue(sensor) : '—';
   const iconHtml = widgetIconHtml(widget);
+  const selectedClass = dashboardTemplate.selected_widget_id === widget.id ? 'selected' : '';
   return `
-    <article class="layout-widget ${widget.locked ? 'locked' : ''}" data-widget-id="${widget.id}" data-locked="${widget.locked}" style="left:${widget.x}px;top:${widget.y}px;width:${widget.width}px;height:${widget.height}px;font-family:${widget.font_family};">
+    <article class="layout-widget ${widget.locked ? 'locked' : ''} ${selectedClass}" data-widget-id="${widget.id}" data-locked="${widget.locked}" style="left:${widget.x}px;top:${widget.y}px;width:${widget.width}px;height:${widget.height}px;font-family:${widget.font_family};">
       ${iconHtml}
       <div class="layout-widget-label" style="font-size:${widget.label_size}px">${widget.label}</div>
       <div class="layout-widget-value" style="font-size:${widget.value_size}px">${valueHtml}</div>
+      <button class="resize-handle" type="button" aria-label="Resize ${widget.label}" data-resize-widget-id="${widget.id}"></button>
     </article>
   `;
 }
@@ -255,6 +258,7 @@ function renderLayoutCanvas(sensors) {
   canvas.innerHTML = (dashboardTemplate.widgets || [])
     .map(widget => layoutWidgetHtml(widget, byId.get(widget.sensor_id)))
     .join('');
+  bindLayoutCanvasInteractions(canvas);
 }
 
 function updatePanelSize(template, width, height) {
@@ -275,6 +279,28 @@ function updateWidgetDesign(template, widgetId, changes) {
   }
 }
 
+function selectedLayoutWidget(template = dashboardTemplate) {
+  const widgets = template.widgets || [];
+  return widgets.find(widget => widget.id === template.selected_widget_id) || widgets[0] || null;
+}
+
+function updateSelectedWidgetDesign(template, changes) {
+  const widget = selectedLayoutWidget(template);
+  if (widget) {
+    updateWidgetDesign(template, widget.id, changes);
+  }
+}
+
+function clamp(value, min, max) {
+  return Math.min(Math.max(Number(value), min), max);
+}
+
+function applyEditorMutation(mutator) {
+  const result = mutator();
+  saveCustomTemplate(dashboardTemplate);
+  return result;
+}
+
 function selectLayoutWidget(template, widgetId) {
   if ((template.widgets || []).some(widget => widget.id === widgetId)) {
     template.selected_widget_id = widgetId;
@@ -286,8 +312,9 @@ function moveLayoutWidget(template, widgetId, x, y) {
   if (!widget || widget.locked) {
     return;
   }
-  widget.x = Number(x);
-  widget.y = Number(y);
+  const panel = template.panel || DEFAULT_DASHBOARD_TEMPLATE.panel;
+  widget.x = clamp(x, 0, Math.max(0, Number(panel.width || 0) - Number(widget.width || 0)));
+  widget.y = clamp(y, 0, Math.max(0, Number(panel.height || 0) - Number(widget.height || 0)));
 }
 
 function resizeLayoutWidget(template, widgetId, width, height) {
@@ -295,30 +322,105 @@ function resizeLayoutWidget(template, widgetId, width, height) {
   if (!widget || widget.locked) {
     return;
   }
-  widget.width = Number(width);
-  widget.height = Number(height);
+  const panel = template.panel || DEFAULT_DASHBOARD_TEMPLATE.panel;
+  widget.width = clamp(width, 80, Math.max(80, Number(panel.width || 0) - Number(widget.x || 0)));
+  widget.height = clamp(height, 48, Math.max(48, Number(panel.height || 0) - Number(widget.y || 0)));
+}
+
+function dragLayoutWidgetBy(template, widgetId, deltaX, deltaY) {
+  const widget = (template.widgets || []).find(candidate => candidate.id === widgetId);
+  if (!widget || widget.locked) {
+    return;
+  }
+  moveLayoutWidget(template, widgetId, Number(widget.x || 0) + Number(deltaX), Number(widget.y || 0) + Number(deltaY));
+}
+
+function resizeLayoutWidgetBy(template, widgetId, deltaWidth, deltaHeight) {
+  const widget = (template.widgets || []).find(candidate => candidate.id === widgetId);
+  if (!widget || widget.locked) {
+    return;
+  }
+  resizeLayoutWidget(template, widgetId, Number(widget.width || 0) + Number(deltaWidth), Number(widget.height || 0) + Number(deltaHeight));
+}
+
+function bindLayoutCanvasInteractions(canvas) {
+  canvas.querySelectorAll('.layout-widget').forEach(element => {
+    const widgetId = element.dataset.widgetId;
+    element.addEventListener('pointerdown', event => {
+      if (event.target.classList.contains('resize-handle')) {
+        return;
+      }
+      const widget = (dashboardTemplate.widgets || []).find(candidate => candidate.id === widgetId);
+      applyEditorMutation(() => selectLayoutWidget(dashboardTemplate, widgetId));
+      populateLayoutEditorControls();
+      renderLayoutCanvas(lastRenderedSensors);
+      if (!widget || widget.locked) {
+        return;
+      }
+      const startX = event.clientX;
+      const startY = event.clientY;
+      const originX = widget.x;
+      const originY = widget.y;
+      const move = moveEvent => {
+        applyEditorMutation(() => moveLayoutWidget(dashboardTemplate, widgetId, originX + moveEvent.clientX - startX, originY + moveEvent.clientY - startY));
+        renderLayoutCanvas(lastRenderedSensors);
+      };
+      const stop = () => {
+        window.removeEventListener('pointermove', move);
+        window.removeEventListener('pointerup', stop);
+      };
+      window.addEventListener('pointermove', move);
+      window.addEventListener('pointerup', stop);
+    });
+  });
+  canvas.querySelectorAll('.resize-handle').forEach(handle => {
+    handle.addEventListener('pointerdown', event => {
+      event.stopPropagation();
+      const widgetId = handle.dataset.resizeWidgetId;
+      const widget = (dashboardTemplate.widgets || []).find(candidate => candidate.id === widgetId);
+      applyEditorMutation(() => selectLayoutWidget(dashboardTemplate, widgetId));
+      populateLayoutEditorControls();
+      if (!widget || widget.locked) {
+        return;
+      }
+      const startX = event.clientX;
+      const startY = event.clientY;
+      const originWidth = widget.width;
+      const originHeight = widget.height;
+      const move = moveEvent => {
+        applyEditorMutation(() => resizeLayoutWidget(dashboardTemplate, widgetId, originWidth + moveEvent.clientX - startX, originHeight + moveEvent.clientY - startY));
+        renderLayoutCanvas(lastRenderedSensors);
+      };
+      const stop = () => {
+        window.removeEventListener('pointermove', move);
+        window.removeEventListener('pointerup', stop);
+      };
+      window.addEventListener('pointermove', move);
+      window.addEventListener('pointerup', stop);
+    });
+  });
 }
 
 function populateLayoutEditorControls() {
-  const firstWidget = (dashboardTemplate.widgets || [])[0];
+  const widget = selectedLayoutWidget(dashboardTemplate);
   document.querySelector('#panel-width').value = dashboardTemplate.panel?.width || '';
   document.querySelector('#panel-height').value = dashboardTemplate.panel?.height || '';
-  if (firstWidget) {
-    document.querySelector('#widget-label').value = firstWidget.label;
-    document.querySelector('#widget-font-family').value = firstWidget.font_family;
-    document.querySelector('#widget-label-size').value = firstWidget.label_size;
-    document.querySelector('#widget-value-size').value = firstWidget.value_size;
-    document.querySelector('#widget-locked').checked = firstWidget.locked;
-    document.querySelector('#widget-icon-asset').value = firstWidget.icon_asset_id || '';
+  document.querySelector('#selected-widget-name').textContent = widget ? widget.label : 'No widget selected';
+  if (widget) {
+    document.querySelector('#widget-label').value = widget.label;
+    document.querySelector('#widget-font-family').value = widget.font_family;
+    document.querySelector('#widget-label-size').value = widget.label_size;
+    document.querySelector('#widget-value-size').value = widget.value_size;
+    document.querySelector('#widget-locked').checked = widget.locked;
+    document.querySelector('#widget-icon-asset').value = widget.icon_asset_id || '';
   }
 }
 
 function setupLayoutEditorControls() {
   const apply = () => {
-    const firstWidget = (dashboardTemplate.widgets || [])[0];
-    updatePanelSize(dashboardTemplate, document.querySelector('#panel-width').value, document.querySelector('#panel-height').value);
-    if (firstWidget) {
-      updateWidgetDesign(dashboardTemplate, firstWidget.id, {
+    applyEditorMutation(() => {
+      updatePanelSize(dashboardTemplate, document.querySelector('#panel-width').value, document.querySelector('#panel-height').value);
+      updateSelectedWidgetDesign(dashboardTemplate, {
         label: document.querySelector('#widget-label').value,
         font_family: document.querySelector('#widget-font-family').value,
         label_size: document.querySelector('#widget-label-size').value,
@@ -326,7 +428,7 @@ function setupLayoutEditorControls() {
         locked: document.querySelector('#widget-locked').checked,
         icon_asset_id: document.querySelector('#widget-icon-asset').value,
       });
-    }
+    });
     refresh();
   };
   ['#panel-width', '#panel-height', '#widget-label', '#widget-font-family', '#widget-label-size', '#widget-value-size', '#widget-locked', '#widget-icon-asset']
@@ -375,6 +477,7 @@ function renderGroupedCards(sensors) {
 
 function renderSensorCards(sensors) {
   const visibleSensors = selectVisibleSensors(sensors, loadSelectedSensorIds());
+  lastRenderedSensors = visibleSensors;
   renderLayoutCanvas(visibleSensors);
   renderHeroStats(visibleSensors);
   renderGroupedCards(visibleSensors);
@@ -473,10 +576,12 @@ INDEX_HTML = """<!doctype html>
     .layout-editor { margin-top: 2rem; display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 1rem; align-items: start; }
     .layout-canvas { position: relative; overflow: hidden; border: 1px solid #38bdf8aa; border-radius: 0; box-shadow: 0 16px 40px #000a; }
     .layout-widget { position: absolute; box-sizing: border-box; padding: .8rem; border: 1px dashed #60a5fa; border-radius: 14px; background: #0f172acc; cursor: move; }
+    .layout-widget.selected { outline: 2px solid #facc15; outline-offset: 2px; }
     .layout-widget.locked { border-style: solid; border-color: #22c55e; cursor: not-allowed; }
     .layout-widget-label { color: #93c5fd; font-weight: 700; }
     .layout-widget-icon { max-width: 32px; max-height: 32px; object-fit: contain; margin-bottom: .35rem; }
     .layout-widget-value { color: #f8fafc; font-weight: 900; line-height: 1; }
+    .resize-handle { position: absolute; right: 4px; bottom: 4px; width: 16px; height: 16px; border: 0; border-radius: 4px; background: linear-gradient(135deg, transparent 45%, #38bdf8 46%); cursor: nwse-resize; }
     .editor-controls { background: #0f1724; border: 1px solid #263449; border-radius: 18px; padding: 1rem; }
     .editor-controls label { display: grid; gap: .25rem; margin: .6rem 0; color: #bfdbfe; font-size: .9rem; }
     .editor-controls input { background: #020617; color: #f8fafc; border: 1px solid #334155; border-radius: 8px; padding: .45rem; }
@@ -508,6 +613,7 @@ INDEX_HTML = """<!doctype html>
       </div>
       <aside class="editor-controls" aria-label="Layout editor controls">
         <h2>Layout Settings</h2>
+        <p class="hint">Selected: <strong id="selected-widget-name">No widget selected</strong></p>
         <label>Panel width <input id="panel-width" type="number" min="100" step="1"></label>
         <label>Panel height <input id="panel-height" type="number" min="100" step="1"></label>
         <label>Custom label <input id="widget-label" type="text" placeholder="CPU, GPU Temp, etc."></label>

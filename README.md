@@ -21,7 +21,7 @@ This repo currently contains the first tested backend prototype. It can collect:
 - Temperatures, fans/RPM, voltage, power, current, energy, humidity, frequency, and PWM values exposed through Linux `hwmon` at `/sys/class/hwmon`, including multiple inputs per device
 - NVIDIA GPU usage, memory, temperature, and power through `nvidia-smi` when available
 
-The code is intentionally small and test-driven. It now also includes an installable desktop-style launcher for Bazzite/Linux, a polished local UI with hero stats, grouped sensor cards, friendlier value formatting, a fullscreen button for second-screen use, a separate sensor-list API, a template/layout API, configurable borderless panel dimensions, fixed-position widgets, custom labels/fonts/sizes, custom asset metadata for icons/logos/backgrounds, lock state for positioned items, browser-saved sensor visibility choices, `.ospanel` package import/export foundations, local-only AIDA64 import inspection, sensor remapping support, and early drag/resize/select layout editor helpers.
+The code is intentionally small and test-driven. It now also includes an installable desktop-style launcher for Bazzite/Linux, a polished local UI with hero stats, grouped sensor cards, friendlier value formatting, a fullscreen button for second-screen use, a separate sensor-list API, a template/layout API, configurable borderless panel dimensions, fixed-position widgets, custom labels/fonts/sizes, custom asset metadata for icons/logos/backgrounds, lock state for positioned items, browser-saved sensor visibility choices, `.ospanel` package import/export foundations, local-only AIDA64 import inspection, sensor remapping support, and a real browser layout editor for selecting, dragging, resizing, and autosaving unlocked widgets.
 
 ## Run the prototype
 
@@ -103,7 +103,7 @@ opensensorpanel inspect-aida64 ~/Downloads/my-panel.sensorpanel
 
 The AIDA64 inspector is intentionally local/personal-use. Imported AIDA64/community/paid template art should stay marked `user-imported-personal-use` and `redistributable: false` unless the user has clear rights to share it.
 
-In the web UI, the **Layout Settings** panel now includes the workflow controls for exporting template JSON, importing template JSON, adding local icon/logo/background metadata, selecting an icon/logo for a widget, and preparing sensor remapping for imported templates.
+In the web UI, the **Layout Settings** panel now includes the workflow controls for exporting template JSON, importing template JSON, adding local icon/logo/background metadata, selecting an icon/logo for a widget, and preparing sensor remapping for imported templates. The custom layout canvas supports click-to-select, drag-to-move, resize handles, lock-respecting edits, and browser-local autosave for edited templates.
 
 ## Run tests
 
@@ -124,7 +124,7 @@ Near-term:
 - Public export blocking for non-redistributable imported assets
 - Clean-room AIDA64 import strategy plus local-only `.sensorpanel` inspector
 - Sensor remapping support for imported templates whose sensor names do not match Linux IDs
-- Browser layout editor controls for panel size and widget label/font/icon/lock settings, with helper logic for selecting, moving, and resizing unlocked widgets
+- Browser layout editor controls for panel size and selected-widget label/font/icon/lock settings, with click-to-select, drag-to-move, resize handles, lock-respecting edits, and browser-local autosave
 
 Long-term:
 

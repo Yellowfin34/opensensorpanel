@@ -330,6 +330,100 @@ console.log(JSON.stringify({{
     assert result["locked"]["y"] == 2
 
 
+def test_web_app_updates_selected_widget_instead_of_first_widget():
+    script = f"""
+{WEB_APP_JS}
+const template = {{
+  selected_widget_id: 'widget.gpu',
+  widgets: [
+    {{id: 'widget.cpu', label: 'CPU', font_family: 'Inter', label_size: 12, value_size: 36, locked: false}},
+    {{id: 'widget.gpu', label: 'GPU', font_family: 'Inter', label_size: 14, value_size: 40, locked: false}},
+  ]
+}};
+updateSelectedWidgetDesign(template, {{label: 'Gaming GPU', value_size: 52, locked: true}});
+console.log(JSON.stringify(template.widgets));
+"""
+
+    output = subprocess.check_output(["node", "-e", script], text=True)
+    widgets = json.loads(output)
+
+    assert widgets[0]["label"] == "CPU"
+    assert widgets[0]["value_size"] == 36
+    assert widgets[1]["label"] == "Gaming GPU"
+    assert widgets[1]["value_size"] == 52
+    assert widgets[1]["locked"] is True
+
+
+def test_web_app_drags_widget_by_delta_with_canvas_bounds_and_locking():
+    script = f"""
+{WEB_APP_JS}
+const template = {{
+  panel: {{width: 300, height: 200}},
+  widgets: [
+    {{id: 'widget.cpu', x: 40, y: 50, width: 100, height: 80, locked: false}},
+    {{id: 'widget.locked', x: 20, y: 30, width: 80, height: 60, locked: true}},
+  ]
+}};
+dragLayoutWidgetBy(template, 'widget.cpu', 500, -100);
+dragLayoutWidgetBy(template, 'widget.locked', 100, 100);
+console.log(JSON.stringify(template.widgets));
+"""
+
+    output = subprocess.check_output(["node", "-e", script], text=True)
+    widgets = json.loads(output)
+
+    assert widgets[0]["x"] == 200
+    assert widgets[0]["y"] == 0
+    assert widgets[1]["x"] == 20
+    assert widgets[1]["y"] == 30
+
+
+def test_web_app_resizes_widget_by_delta_with_minimum_and_canvas_bounds():
+    script = f"""
+{WEB_APP_JS}
+const template = {{
+  panel: {{width: 320, height: 220}},
+  widgets: [{{id: 'widget.cpu', x: 100, y: 60, width: 100, height: 80, locked: false}}]
+}};
+resizeLayoutWidgetBy(template, 'widget.cpu', -500, -500);
+const small = JSON.parse(JSON.stringify(template.widgets[0]));
+resizeLayoutWidgetBy(template, 'widget.cpu', 500, 500);
+console.log(JSON.stringify({{small, large: template.widgets[0]}}));
+"""
+
+    output = subprocess.check_output(["node", "-e", script], text=True)
+    result = json.loads(output)
+
+    assert result["small"]["width"] == 80
+    assert result["small"]["height"] == 48
+    assert result["large"]["width"] == 220
+    assert result["large"]["height"] == 160
+
+
+def test_web_app_autosaves_template_after_editor_mutation():
+    script = f"""
+{WEB_APP_JS}
+global.localStorage = {{
+  data: {{}},
+  setItem(key, value) {{ this.data[key] = value; }},
+  getItem(key) {{ return this.data[key] || null; }},
+}};
+dashboardTemplate = {{
+  panel: {{width: 300, height: 200}},
+  selected_widget_id: 'widget.cpu',
+  widgets: [{{id: 'widget.cpu', label: 'CPU', x: 0, y: 0, width: 100, height: 80, locked: false}}]
+}};
+applyEditorMutation(() => dragLayoutWidgetBy(dashboardTemplate, 'widget.cpu', 25, 35));
+console.log(JSON.stringify(loadCustomTemplate()));
+"""
+
+    output = subprocess.check_output(["node", "-e", script], text=True)
+    template = json.loads(output)
+
+    assert template["widgets"][0]["x"] == 25
+    assert template["widgets"][0]["y"] == 35
+
+
 def test_web_app_saves_and_loads_custom_template_from_browser_storage():
     script = f"""
 {WEB_APP_JS}
